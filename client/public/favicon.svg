@@ -1,0 +1,57 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <defs>
+    <!-- Glow filter -->
+    <filter id="glow">
+      <feGaussianBlur stdDeviation="2" result="coloredBlur"/>
+      <feMerge>
+        <feMergeNode in="coloredBlur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+    <!-- Nunito Bold via Google Fonts (fallback to system sans-serif) -->
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@700');
+      .letter { font-family: 'Nunito', sans-serif; font-weight: 700; font-size: 24px; text-anchor: middle; dominant-baseline: central; }
+    </style>
+  </defs>
+
+  <!-- Outer Glow Rim — pulsing gold/amber -->
+  <circle cx="32" cy="32" r="28" fill="none" stroke="#D4A017" stroke-width="2">
+    <animate attributeName="opacity" values="0.3;0.6;0.3" dur="2s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- Main Node — color cycling through brand palette -->
+  <circle cx="32" cy="32" r="18" filter="url(#glow)">
+    <animate attributeName="fill"
+      values="#1A1C20;#2AAFA9;#E8624A;#D4A017;#8B5CF6;#4F7EC4;#1A1C20"
+      keyTimes="0;0.17;0.33;0.5;0.67;0.83;1"
+      dur="8s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- State 2 (2-4s): White "G" -->
+  <text class="letter" x="32" y="33" fill="white">
+    G
+    <animate attributeName="opacity"
+      values="0;0;1;1;0;0;0;0;0"
+      keyTimes="0;0.24;0.25;0.49;0.5;0.74;0.75;0.99;1"
+      dur="8s" repeatCount="indefinite"/>
+  </text>
+
+  <!-- State 3 (4-6s): White dot separator -->
+  <circle cx="32" cy="32" r="2" fill="white">
+    <animate attributeName="opacity"
+      values="0;0;0;0;1;1;0;0;0"
+      keyTimes="0;0.24;0.25;0.49;0.5;0.74;0.75;0.99;1"
+      dur="8s" repeatCount="indefinite"/>
+  </circle>
+
+  <!-- State 4 (6-8s): Teal "L" -->
+  <text class="letter" x="32" y="33" fill="#2AAFA9">
+    L
+    <animate attributeName="opacity"
+      values="0;0;0;0;0;0;1;1;0"
+      keyTimes="0;0.24;0.25;0.49;0.5;0.74;0.75;0.99;1"
+      dur="8s" repeatCount="indefinite"/>
+  </text>
+</svg>
