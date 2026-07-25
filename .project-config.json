@@ -1,0 +1,49 @@
+{
+  "build_command": "pnpm run build",
+  "capabilities": [
+    "db",
+    "server",
+    "user"
+  ],
+  "dev_command": "pnpm run dev",
+  "env_vars": {
+    "DATABASE_URL": "mysql://b5BH3wQgpo1xgCj.b8506ae6a7bf:bj248Kd2H6fw4TfWRxwN@gateway03.us-east-1.prod.aws.tidbcloud.com:4000/mhfpBZgGttr5P7pgfv7LpQ?ssl={\"rejectUnauthorized\":true}"
+  },
+  "experiments": null,
+  "git_remote": {
+    "repo_url": "s3://vida-prod-gitrepo/webdev-git/310519663295472478/mhfpBZgGttr5P7pgfv7LpQ",
+    "access_key_id": "ASIAZV3A2ECZHKW2TSZB",
+    "secret_access_key": "jSItqXiYuQ04tV4VQbYWEcKzaE4hBv0a7PcwDUBs",
+    "session_token": "IQoJb3JpZ2luX2VjEJP//////////wEaCXVzLWVhc3QtMSJGMEQCIEXn8t4pciA+3yW2PdXk41LWwucVOQaSffwoo5CyPEVjAiA4aqVtctj4ZcIkRcJN4gdX7c8ekuNWx6T0KrRxoJBMAyr2AwhbEAQaDDY2NTM4NjA5ODg2NiIMYdcxS755zBfGLLznKtMDKXDAp99xICZb9/h5+UeAFhLYtbZi3iZNGPL86GCsKdbvq+nIxqHM0OCz1M+9iq8oUk/cZ8OpSxvKbPDaStopmJUSwGoK3Rcdwff9M+1Q26pTQXYonGbb/C949GdiUCQl94oajk/rDwu3K+MLPGNf447q4YWnHvLBi0J3QNpzTqJrjS4l+xgeIZbuiHxZcB/JlN9GSGAYTDxjK8RnqnVlmvnWe3RwwxLBWmKjZWFhpMcTfW4uTxT5XgvWtH9ISBZHmCAqTgPMQrORto9VusT78shYXDo28nuCH1M1vGUvtKfTohcGICoOg51E5czYrdoFveauyd6jKhZFly12sBwCsnNZlZrixBM68ow/7D47cfWL6Wh1Wsv96ctsPZCUN9lEh+5NrCTctPadvwhIa69B9K119957wi9P5mQf3m0XhSPoT0mS09dQAPvStTCPs4fNoTVxBsNsGoNuA29DbU1FHKQ/D61k+Hxb7O+EC4y8pJ0koYUeXkvzDwWwL8xSgZzxgBOaPoGdDTsmbOe6MZCXVWag86b8w8156LK1coA3BNYFSdJA0MSxM6CE0ac/eHwC5H6c9n3EyGQG5wCW/UM5+JVpwQOBlwnLnRjx2Kccwzyt674w+eOv0gY6ngGtxU0PuCYpBrSd5hu4xwHX07Jyt+SihYwQ6/Jq74VyRkZHSTwypa0oKbiK/4eo8ne3fxyLVx+RsIGR2Lda4kHHbTuLzK3yUKVQwjB0+wG2jaf0kopS/Jq35MD5401YkVTDasGz20LgN8Vf0O8BDWFzyx1DaWi1pbCywIFoPraKnIVhTne1nvyQjcDjpgcQt784RreOUFIUEn2pmBu/yw==",
+    "expiration": "2026-07-07T06:20:41.000Z",
+    "backend": "GIT_BACKEND_S3"
+  },
+  "name": "geeves-shopping",
+  "path": "/home/ubuntu/geeves-shopping",
+  "port": 3000,
+  "secrets": {
+    "APP_URL": "https://geeves.manus.space",
+    "BUILT_IN_FORGE_API_KEY": "37TFjH67bBJq5jq6ykUgoh",
+    "BUILT_IN_FORGE_API_URL": "https://forge.manus.ai",
+    "GOOGLE_CLIENT_ID": "252284276285-v4c5d5kcbhar7sqe0n4v8iubb32qr5e2.apps.googleusercontent.com",
+    "GOOGLE_CLIENT_SECRET": "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",
+    "GOOGLE_SERVICE_ACCOUNT_EMAIL": "geeves-calendar-sync@geeves-495802.iam.gserviceaccount.com",
+    "GOOGLE_SERVICE_ACCOUNT_KEY": "-----BEGIN PRIVATE KEY-----\nMIIEvQIBADANBgkqhkiG9w0BAQEFAASCBKcwggSjAgEAAoIBAQCntH32/d3cKQF/\nnCyoIrRW22k2+U3Gg8XV9nlVOaAG9VG68y0lmbmTvvcKUIz7VPJBYw4tayggD5DI\nflkY0d+6XcHjRrH+7DJtbRgf6Foy/QlhKD2E7TA0GwPr/JLaxR9i/NAPvc4SvM9Y\nR1FO5dylYwT1mwlFBA52YAJXeuAAh4c+42h8AzbfRh+OoKVDhLYxKTmny74hjR/A\nQt8FfE9issDGlm6Oxi9NGcWUl74uerIBAWS2rH6w7jp0itWgwIOfQKfqZpV8g9b9\nhbxxp95t4gE84omBPtYdUq4hL3Cq1dx3riutC85awGEbyL7LHkyoYcWXTOIsMz8+\nJ7cIZm23AgMBAAECggEAGF5my2QaP+qJeDSGXKwmTlS1ljJltcniDnQxL0wfT8OH\n68V4MvWCfNCL7yjDQ6YVSaEOJ1Vh0D7Sx/9sDOo6O0dybAcSyDskHLh0f/ZwXOZd\n3YtOXSlmDrw6NqlN4ZIxPF4GEbN/5UMgUfCTBQbrp/CagOHVV/z96P+Md4+4Svsq\nSoel4TcEwyUbMR2jla0Q6X+yEl8FAfoRb+4t/v3gR3elnlGbQBYIcZFw/xzJBhw4\n0H6Kq1rND7h3aTSoC4dko0jbPM6SGQVuOeZI2jp22DgkoQ39jU3onvdFL3czduEx\n7R/hc4nralehn/LXU8lBrjkPOBU55Nqlw6pBtDOE0QKBgQDYgLVF3y4LQRmTABz3\nnOs1WZQWrtANtBY6n+/wOVbo36Ou4dlpeqlZ8/u+RT3P5N+p6ak5X83aSZEssO2b\nWZkXMRJyndVT/llgYwmfOQG0PMo7APNX6daW0hGTvo3IpebLwLhhs+PdZnHSiYUu\nyXzS/WUCTmurJmR2B10QZdt3CQKBgQDGTMrZEP5ojjyCEQ8ttaLekMIfSbVNGP+N\nraCmxnNTLKJh7ElGu74xicb+08CeEtb7Kx7Fbm7M+2PZ+IRGLouAd2NJY6M3PBoV\n2GGIw3Xvn6/Z/L6MH3/1nOz1G01ovHfmvit1GDjTFMClbr1pmgK/7OIAyZtm+oCt\nI/kzfF0uvwKBgDZcAqe7hK0QuGIfaiaFwMzRZAxZ8iUurVIk7DKtwvOPi2KSlGsW\ngET0rKW2bvGu7rWT1IhyVJZVWF0XQ2F5GqYnDRG4LWL8fuZjl3vh7Vqa1NAByhet\nv9J4hi9JbgIOHafVCLaHW1Qwr62EF+uKbYvwUZdFp2T+q8SyzpwaZwM5AoGAGuuX\n6in9b7JHkpzAQ8NRzgc240p9W28WWmSE178/Lr5zePm75Odd5Zm/sx6KGquSFdz/\nu2vHjPpfztqHEoQFGjaa+v6UzM3S+L48V3W5kANMuzotoBYyp+Ra4teHBb34RRHy\nEl5scHNzx8Gl4y0uTGHbOKIl/6/oQhkNHqk2eT8CgYEAzoui3yjNILSiRc/+aUBz\n3slWvfAhgzgkEkU5TMx/evJDKBXxQQMbDfYT2mZLaEiLuAm+qQpHY1g1bPtcAvKC\nfUOMe3r9Ojegc1aXzc6ACoHlQ6xQg5iJk36DaZcWcXahrfypAixXvDbKHzLoBK+P\nJAikSYlStJ4J3EgMaMUTg8k=\n-----END PRIVATE KEY-----",
+    "JWT_SECRET": "Ksf86cxXMujRRnssReDUh6",
+    "OAUTH_SERVER_URL": "https://api.manus.im",
+    "OWNER_NAME": "Tarik Perkins",
+    "OWNER_OPEN_ID": "Rce2ghCZxYDAg6N4ESTmwN",
+    "RESEND_API_KEY": "re_WVi5sLLv_B6sYLhxYPk4dzWvK87NhkNL1",
+    "SYSTEM_CRON_SECRET": "17Tjp200%%%",
+    "VITE_ANALYTICS_ENDPOINT": "https://manus-analytics.com",
+    "VITE_ANALYTICS_WEBSITE_ID": "b2f9044c-fdfe-4f1e-a578-16d1479cce6d",
+    "VITE_APP_ID": "mhfpBZgGttr5P7pgfv7LpQ",
+    "VITE_APP_LOGO": "https://files.manuscdn.com/user_upload_by_module/web_dev_logo/310519663295472478/qCVZPBIPQaZrmLyQ.png",
+    "VITE_APP_TITLE": "Geeves.life",
+    "VITE_FRONTEND_FORGE_API_KEY": "dLgMen6mmdC5NYqH9kcCw7",
+    "VITE_FRONTEND_FORGE_API_URL": "https://forge.manus.ai",
+    "VITE_OAUTH_PORTAL_URL": "https://manus.im"
+  },
+  "template_id": "web-db-user",
+  "test_command": "pnpm test"
+}

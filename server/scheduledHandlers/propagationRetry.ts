@@ -1,0 +1,120 @@
+// Propagation Retry Queue Heartbeat Handler
+// Endpoint: POST /api/scheduled/propagation-retry
+// Auth:     Manus cron gateway via sdk.authenticateRequest
+// Schedule: Every 2 minutes - cron 6-field: 0 */2 * * * *
+//
+// Drains the propagation_queue table: picks up pending items whose nextRetryAt
+// has passed, re-invokes onEventUpserted with skipRateLimit=true, and marks
+// them resolved or bumps attempts with exponential backoff.
+import type { Request, Response } from "express";
+import { sdk } from "../_core/sdk";
+import { getDb } from "../db";
+import { propagationQueue } from "../../drizzle/schema";
+import { eq, and, lte } from "drizzle-orm";
+import { onEventUpserted } from "../services/eventPropagation";
+
+const BATCH_SIZE = 200; // increased from 50 to speed up backfill drain
+
+export async function propagationRetryHandler(req: Request, res: Response) {
+  const startedAt = Date.now();
+
+  // Authenticate via Manus cron gateway. Allow localhost for dev/test.
+  try {
+    const user = await sdk.authenticateRequest(req);
+    if (!user.isCron) {
+      const ip = req.ip ?? "";
+      const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
+      if (!isInternal) return res.status(403).json({ error: "cron-only endpoint" });
+    }
+  } catch {
+    const ip = req.ip ?? "";
+    const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
+    if (!isInternal) return res.status(401).json({ error: "Unauthorized" });
+  }
+
+  const db = await getDb();
+  if (!db) {
+    return res.status(500).json({ error: "Database unavailable" });
+  }
+
+  try {
+    const now = Date.now();
+
+    // Fetch pending items ready for retry
+    const items = await db
+      .select()
+      .from(propagationQueue)
+      .where(
+        and(
+          eq(propagationQueue.status, "pending"),
+          lte(propagationQueue.nextRetryAt, now),
+        )
+      )
+      .limit(BATCH_SIZE);
+
+    if (items.length === 0) {
+      return res.json({ processed: 0, elapsed: Date.now() - startedAt });
+    }
+
+    let resolved = 0;
+    let failed = 0;
+    let retried = 0;
+
+    for (const item of items) {
+      try {
+        // Re-propagate with skipRateLimit to bypass the in-memory limiter
+        await onEventUpserted(item.eventId, item.householdId, {
+          skipGoogleWrite: false,
+          skipRateLimit: true,
+        });
+
+        // Mark resolved
+        await db
+          .update(propagationQueue)
+          .set({ status: "resolved", resolvedAt: Date.now() })
+          .where(eq(propagationQueue.id, item.id));
+        resolved++;
+      } catch (err) {
+        const newAttempts = item.attempts + 1;
+        if (newAttempts >= item.maxAttempts) {
+          // Mark as permanently failed
+          await db
+            .update(propagationQueue)
+            .set({ status: "failed", attempts: newAttempts, resolvedAt: Date.now() })
+            .where(eq(propagationQueue.id, item.id));
+          failed++;
+        } else {
+          // Exponential backoff: 1min, 4min, 9min, 16min, 25min
+          const backoffMs = Math.pow(newAttempts + 1, 2) * 60_000;
+          await db
+            .update(propagationQueue)
+            .set({
+              attempts: newAttempts,
+              nextRetryAt: Date.now() + backoffMs,
+            })
+            .where(eq(propagationQueue.id, item.id));
+          retried++;
+        }
+        console.warn(
+          `[PropagationRetry] Event ${item.eventId} attempt ${newAttempts} failed:`,
+          (err as Error)?.message,
+        );
+      }
+    }
+
+    console.log(
+      `[PropagationRetry] Processed ${items.length} items: ${resolved} resolved, ${retried} retried, ${failed} failed (${Date.now() - startedAt}ms)`,
+    );
+
+    return res.json({
+      processed: items.length,
+      resolved,
+      retried,
+      failed,
+      elapsed: Date.now() - startedAt,
+    });
+  } catch (err) {
+    console.error("[PropagationRetry] Handler error:", err);
+    return res.status(500).json({ error: (err as Error)?.message });
+  }
+}
