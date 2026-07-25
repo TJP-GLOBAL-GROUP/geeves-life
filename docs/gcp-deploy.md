@@ -85,11 +85,11 @@ gcloud iam workload-identity-pools providers create-oidc github-actions \
   --workload-identity-pool=github --location=global --project PROJECT_ID \
   --issuer-uri=https://token.actions.githubusercontent.com \
   --attribute-mapping="google.subject=assertion.sub,attribute.repo=assertion.repository" \
-  --attribute-condition="assertion.repository=='tarikjp/geeves-life'"
+  --attribute-condition="assertion.repository=='TJP-GLOBAL-GROUP/geeves-life'"
 gcloud iam service-accounts add-iam-policy-binding \
   geeves-deploy@PROJECT_ID.iam.gserviceaccount.com --project PROJECT_ID \
   --role=roles/iam.workloadIdentityUser \
-  --member="principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/attribute.repo/tarikjp/geeves-life"
+  --member="principalSet://iam.googleapis.com/projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/attribute.repo/TJP-GLOBAL-GROUP/geeves-life"
 ```
 
 ## 6. GitHub repo configuration (NOT secrets in .env)
@@ -101,7 +101,7 @@ Repo **secrets** (same page, Secrets tab):
 - `GCP_WIF_PROVIDER` = `projects/PROJECT_NUMBER/locations/global/workloadIdentityPools/github/providers/github-actions`
 - `GCP_DEPLOY_SA` = `geeves-deploy@PROJECT_ID.iam.gserviceaccount.com`
 
-Via CLI: `gh variable set GCP_PROJECT_ID -b"…"` / `gh secret set GCP_WIF_PROVIDER -b"…"`.
+Via CLI: `gh variable set GCP_PROJECT_ID -R TJP-GLOBAL-GROUP/geeves-life -b"…"` / `gh secret set GCP_WIF_PROVIDER -R TJP-GLOBAL-GROUP/geeves-life -b"…"`.
 
 ## 7. Deploy
 
