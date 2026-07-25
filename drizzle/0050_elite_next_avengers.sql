@@ -1,0 +1,1 @@
+ALTER TABLE `notification_settings` ADD `lastNotifiedAt` bigint DEFAULT 0;

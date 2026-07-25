@@ -1,0 +1,1 @@
+ALTER TABLE `calendars` ADD `shadowSource` boolean DEFAULT true;

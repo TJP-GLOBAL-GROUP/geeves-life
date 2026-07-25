@@ -1,0 +1,1 @@
+ALTER TABLE `household_members` ADD `invitedByMemberId` varchar(36);

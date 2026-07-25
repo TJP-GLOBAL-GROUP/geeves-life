@@ -1,0 +1,1 @@
+ALTER TABLE `calendars` ADD `noGoogleWrite` boolean DEFAULT false;

@@ -1,0 +1,1 @@
+ALTER TABLE `properties` ADD `timezone` varchar(64) DEFAULT 'America/New_York';

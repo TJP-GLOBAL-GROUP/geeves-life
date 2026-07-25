@@ -1,0 +1,1 @@
+ALTER TABLE `events` ADD CONSTRAINT `events_calendar_external_uniq` UNIQUE(`calendarId`,`externalId`);

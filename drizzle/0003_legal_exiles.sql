@@ -1,0 +1,1 @@
+ALTER TABLE `shopping_sessions` MODIFY COLUMN `status` enum('pending_credentials','ready','preparing','shopping','awaiting_review','approved','completed','cancelled') NOT NULL DEFAULT 'ready';

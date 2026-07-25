@@ -1,0 +1,1 @@
+ALTER TABLE `household_members` ADD `googleName` varchar(255);

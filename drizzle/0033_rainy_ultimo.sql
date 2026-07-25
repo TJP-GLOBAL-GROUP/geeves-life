@@ -1,0 +1,2 @@
+ALTER TABLE `email_scrape_jobs` MODIFY COLUMN `status` enum('pending','running','done','failed','needs_reauth') NOT NULL DEFAULT 'pending';--> statement-breakpoint
+ALTER TABLE `email_scrape_jobs` ADD `platformId` varchar(36);
