@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Circular blueish-gray background -->
+  <circle cx="64" cy="64" r="60" fill="#D8E2EC"/>
+
+  <!-- Constellation Mark (scaled tighter to fit within circle) -->
+  <!-- Roof lines -->
+  <line x1="64" y1="26" x2="34" y2="48" stroke="#2AAFA9" stroke-width="3" stroke-linecap="round"/>
+  <line x1="64" y1="26" x2="94" y2="48" stroke="#2AAFA9" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Verticals -->
+  <line x1="34" y1="48" x2="34" y2="84" stroke="#E8624A" stroke-width="3" stroke-linecap="round"/>
+  <line x1="94" y1="48" x2="94" y2="84" stroke="#D4A017" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Base horizontals -->
+  <line x1="34" y1="84" x2="52" y2="84" stroke="#8B5CF6" stroke-width="3" stroke-linecap="round"/>
+  <line x1="76" y1="84" x2="94" y2="84" stroke="#4F7EC4" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Arch -->
+  <path d="M 52,84 L 52,73 C 52,63 57,57 64,57 C 71,57 76,63 76,73 L 76,84"
+        fill="none" stroke="#2AAFA9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+  <line x1="64" y1="57" x2="64" y2="84" stroke="#2AAFA9" stroke-width="3" stroke-linecap="round"/>
+  <line x1="64" y1="84" x2="64" y2="100" stroke="#E8943A" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Nodes -->
+  <circle cx="64" cy="26" r="7" fill="#2AAFA9"/>
+  <circle cx="34" cy="48" r="5.5" fill="#E8624A"/>
+  <circle cx="94" cy="48" r="5.5" fill="#D4A017"/>
+  <circle cx="64" cy="57" r="4.5" fill="#2AAFA9"/>
+  <circle cx="34" cy="84" r="5.5" fill="#8B5CF6"/>
+  <circle cx="94" cy="84" r="5.5" fill="#4F7EC4"/>
+  <circle cx="64" cy="100" r="4.5" fill="none" stroke="#E8943A" stroke-width="2.5"/>
+</svg>

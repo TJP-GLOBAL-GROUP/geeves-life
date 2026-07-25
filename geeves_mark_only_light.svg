@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Geeves.Life — Constellation Mark only, Light Mode variant (no wordmark/tagline), transparent background -->
+<!-- Tight viewBox cropped to the mark: x=314 y=139 w=452 h=527 -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="314 139 452 527" width="452" height="527">
+
+  <!-- ── ROOF LINES ── -->
+  <line x1="540" y1="175" x2="350" y2="310"
+        stroke="#2AAFA9" stroke-width="8" stroke-linecap="round"/>
+  <line x1="540" y1="175" x2="730" y2="310"
+        stroke="#2AAFA9" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- ── VERTICALS ── -->
+  <line x1="350" y1="310" x2="350" y2="530"
+        stroke="#E8624A" stroke-width="8" stroke-linecap="round"/>
+  <line x1="730" y1="310" x2="730" y2="530"
+        stroke="#D4A017" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- ── BASE HORIZONTALS ── -->
+  <line x1="350" y1="530" x2="470" y2="530"
+        stroke="#8B5CF6" stroke-width="8" stroke-linecap="round"/>
+  <line x1="610" y1="530" x2="730" y2="530"
+        stroke="#4F7EC4" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- ── ARCH ── -->
+  <path d="M 470.0,530.0 L 470.0,460.0 C 470.0,421.339 501.339,390.0 540.0,390.0 C 578.661,390.0 610.0,421.339 610.0,460.0 L 610.0,530.0"
+        fill="none" stroke="#2AAFA9" stroke-width="8"
+        stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- ── INNER STEM ── -->
+  <line x1="540" y1="390" x2="540" y2="530"
+        stroke="#2AAFA9" stroke-width="8" stroke-linecap="round"/>
+  <line x1="540" y1="530" x2="540" y2="640"
+        stroke="#E8943A" stroke-width="8" stroke-linecap="round"/>
+
+  <!-- ── NODES ── -->
+  <circle cx="540" cy="175" r="36"  fill="#2AAFA9"/>
+  <circle cx="350" cy="310" r="30"  fill="#E8624A"/>
+  <circle cx="730" cy="310" r="30"  fill="#D4A017"/>
+  <circle cx="540" cy="390" r="22"  fill="#2AAFA9"/>
+  <circle cx="350" cy="530" r="30"  fill="#8B5CF6"/>
+  <circle cx="730" cy="530" r="30"  fill="#4F7EC4"/>
+  <!-- Open/hollow bottom node — transparent fill -->
+  <circle cx="540" cy="640" r="26"  fill="transparent" stroke="#E8943A" stroke-width="8"/>
+
+</svg>

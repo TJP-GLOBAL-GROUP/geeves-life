@@ -1,0 +1,116 @@
+═══════════════════════════════════════════════════════════════════════════════
+GEEVES.LIFE — MIGRATION NOTES
+Generated: 2026-07-13 by Manus AI
+═══════════════════════════════════════════════════════════════════════════════
+
+1. PROJECT OVERVIEW
+───────────────────
+Geeves.Life is a private life-management operating system built on:
+  - React 19 + Tailwind 4 + tRPC 11 (frontend)
+  - Express 4 + Node.js 22 (backend)
+  - TiDB Serverless (MySQL-compatible database)
+  - S3 (file storage via Manus Forge proxy)
+  - Google OAuth (primary auth) + Manus OAuth (fallback)
+
+The app is deployed as a single server process serving both the API and the
+Vite-built SPA. Production hosting is on Manus Cloud (autoscale/serverless).
+
+2. DATABASE
+───────────
+  - Engine: TiDB Serverless v8.5.3 (MySQL 8.0 compatible)
+  - Schema: Drizzle ORM (drizzle/schema.ts)
+  - Migrations: `pnpm db:push` (drizzle-kit generate + migrate)
+  - IMPORTANT: TiDB does NOT support MySQL triggers. All "trigger-like"
+    behavior is handled at the application layer.
+  - Connection requires SSL: ?ssl={"rejectUnauthorized":true}
+
+3. AUTHENTICATION
+─────────────────
+  - Primary: Google OAuth 2.0 (server/auth/googleOAuth.ts)
+  - Fallback: Manus OAuth (server/_core/oauth.ts)
+  - Identity dedup: On login, system checks email first. If a user exists
+    with the same email but different openId, it links the identity rather
+    than creating a duplicate.
+  - Session: JWT cookie (httpOnly, secure, sameSite=lax)
+
+4. iCAL SYSTEM (CRITICAL)
+─────────────────────────
+  - Inbound: Polls external iCal feeds every 10 min (icalPollHandler)
+  - Outbound: LIVE endpoint at GET /api/ical/:propertyId.ics
+    * Generates fresh ICS from database on every request
+    * NO CDN caching (Cache-Control: no-cache, no-store)
+    * This replaced the old S3-hosted static files which had a fatal
+      CloudFront caching bug (stale for weeks)
+  - Feed assignments per property are in the `property_platforms` table
+  - WARNING: Never use S3/CDN for outbound ICS again. The live endpoint
+    is the only correct approach.
+
+5. CALENDAR WEBHOOKS
+────────────────────
+  - Google Calendar push notifications via service account
+  - Webhook URL: {APP_URL}/api/webhooks/google-calendar
+  - Requires the Google Calendar API enabled on the service account project
+  - Channel tokens are stored in `calendar_webhook_channels` table
+
+6. SCHEDULED JOBS (HEARTBEAT)
+─────────────────────────────
+  - Uses Manus Heartbeat SDK (server/_core/heartbeat.ts)
+  - Jobs: icalPoll (10min), knowledgeReview (daily), icsReconcile (hourly)
+  - Authenticated via SYSTEM_CRON_SECRET header
+  - Endpoint: POST /api/scheduled/heartbeat
+
+7. KEY ARCHITECTURAL DECISIONS
+──────────────────────────────
+  - Event propagation: Shadow blocks system copies events across calendars
+    within the household. Source events create read-only "shadow" copies on
+    target calendars.
+  - Vertical access control: Properties, calendars, and features are gated
+    by "verticals" (organizational units). Members get access via roles or
+    explicit vertical assignments.
+  - Constellation model: Household members are called "constellation members"
+    with roles: household_admin, ea (executive assistant), member, child, elder.
+  - Prep time rules: Automatic buffer blocks before/after property bookings,
+    respecting Sunday/holiday restrictions per country.
+
+8. KNOWN LIMITATIONS
+────────────────────
+  - TiDB: No triggers, no stored procedures, no full-text indexes
+  - Autoscale hosting: Cold starts possible, no persistent background workers
+  - S3 via CloudFront: Objects cached aggressively — use versioned keys or
+    live endpoints for time-sensitive data
+  - Google webhook 403: Calendar 08YEHqmboSnz_miBqTo6L consistently fails
+    webhook registration (likely a permissions issue on that specific calendar)
+
+9. FILE STRUCTURE (KEY DIRECTORIES)
+───────────────────────────────────
+  client/src/pages/         — Page components (CalendarView, Properties, etc.)
+  client/src/components/    — Reusable UI (DashboardLayout, ShadowBlocksPanel)
+  server/routers/           — tRPC routers (properties, calendar, household)
+  server/services/          — Business logic (icalAggregator, eventPropagation)
+  server/auth/              — OAuth handlers (googleOAuth, googleAccountConnect)
+  server/endpoints/         — Non-tRPC Express endpoints (icsReconcile)
+  server/scheduledHandlers/ — Heartbeat job handlers (icalPoll)
+  drizzle/                  — Schema and migrations
+  docs/                     — Architecture docs, KIMI report, auth docs
+
+10. TESTS
+─────────
+  - Framework: Vitest
+  - Count: 289 tests across 18 files
+  - Run: `pnpm test`
+  - All tests pass as of this export
+
+11. RECENT CRITICAL FIXES (Jul 10-13, 2026)
+────────────────────────────────────────────
+  a) iCal feed 3-way swap: Morabeza/Sunset Studio/Penthouse feeds were
+     assigned to wrong properties since initial setup (Jun 16). Fixed.
+  b) CloudFront stale ICS: Outbound ICS files cached indefinitely by CDN.
+     Replaced with live endpoint.
+  c) DST bug: 86400000ms hardcoded day arithmetic replaced with setUTCDate.
+  d) Properties nav filter: Changed from hasVerticalAccess to isAdminOrEA.
+  e) Focus retention: BookingRequestDialog useMemo side-effect replaced
+     with useEffect+useRef.
+
+═══════════════════════════════════════════════════════════════════════════════
+END OF MIGRATION NOTES
+═══════════════════════════════════════════════════════════════════════════════

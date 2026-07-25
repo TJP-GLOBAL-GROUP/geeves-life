@@ -1,0 +1,42 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" width="128" height="128">
+  <!-- Blueish-gray rounded card on transparent background -->
+  <rect x="4" y="4" width="120" height="120" rx="24" ry="24" fill="#D8E2EC"/>
+
+  <!-- Constellation Mark (corrected from original geometry) -->
+  <!-- Original: 1080x1080, constellation x:350-730, y:175-640 -->
+  <!-- Scale: map 350-730 (380px) to ~24-104 (80px), map 175-640 (465px) to ~18-108 (90px) -->
+  <!-- scaleX = 80/380 = 0.2105, scaleY = 90/465 = 0.1935 -->
+  <!-- offsetX = 24 - 350*0.2105 = 24 - 73.7 = -49.7 → center: shift +12 → use direct mapping -->
+
+  <!-- Roof lines -->
+  <line x1="64" y1="20" x2="24" y2="46" stroke="#2AAFA9" stroke-width="3" stroke-linecap="round"/>
+  <line x1="64" y1="20" x2="104" y2="46" stroke="#2AAFA9" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Verticals -->
+  <line x1="24" y1="46" x2="24" y2="88" stroke="#E8624A" stroke-width="3" stroke-linecap="round"/>
+  <line x1="104" y1="46" x2="104" y2="88" stroke="#D4A017" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Base horizontals -->
+  <line x1="24" y1="88" x2="49" y2="88" stroke="#8B5CF6" stroke-width="3" stroke-linecap="round"/>
+  <line x1="79" y1="88" x2="104" y2="88" stroke="#4F7EC4" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Arch -->
+  <path d="M 49,88 L 49,74 C 49,62 55,55 64,55 C 73,55 79,62 79,74 L 79,88"
+        fill="none" stroke="#2AAFA9" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"/>
+
+  <!-- Inner stem (teal from arch node DOWN to base) -->
+  <line x1="64" y1="55" x2="64" y2="88" stroke="#2AAFA9" stroke-width="3" stroke-linecap="round"/>
+  <!-- Amber stem (from base DOWN to ABOVE the open node — stops before entering it) -->
+  <line x1="64" y1="88" x2="64" y2="103" stroke="#E8943A" stroke-width="3" stroke-linecap="round"/>
+
+  <!-- Nodes -->
+  <circle cx="64" cy="20" r="7.5" fill="#2AAFA9"/>
+  <circle cx="24" cy="46" r="6" fill="#E8624A"/>
+  <circle cx="104" cy="46" r="6" fill="#D4A017"/>
+  <circle cx="64" cy="55" r="4.5" fill="#2AAFA9"/>
+  <circle cx="24" cy="88" r="6" fill="#8B5CF6"/>
+  <circle cx="104" cy="88" r="6" fill="#4F7EC4"/>
+  <!-- Open/hollow bottom node — line stops at top edge, fill matches card bg -->
+  <circle cx="64" cy="109" r="5.5" fill="#D8E2EC" stroke="#E8943A" stroke-width="3"/>
+</svg>

@@ -1,0 +1,53 @@
+{
+  "manifest_version": 3,
+  "name": "Geeves Invoice Capture",
+  "version": "1.2.0",
+  "description": "Capture invoice data from Walmart, Amazon, and other vendors for Geeves.Life expense categorization.",
+  "permissions": [
+    "activeTab",
+    "storage",
+    "tabs",
+    "cookies"
+  ],
+  "host_permissions": [
+    "https://www.walmart.com/*",
+    "https://www.amazon.com/*",
+    "https://geeves.life/*",
+    "https://www.geeves.life/*",
+    "https://*.manus.space/*"
+  ],
+  "background": {
+    "service_worker": "src/background.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://www.walmart.com/orders/*", "https://www.walmart.com/account/orders*"],
+      "js": ["content-scripts/walmart.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://www.amazon.com/gp/your-account/order-details*", "https://www.amazon.com/your-orders/*", "https://www.amazon.com/gp/css/summary/print.html*"],
+      "js": ["content-scripts/amazon.js"],
+      "run_at": "document_idle"
+    },
+    {
+      "matches": ["https://geeves.life/*", "https://www.geeves.life/*", "https://*.manus.space/*"],
+      "js": ["content-scripts/geeves-bridge.js"],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "src/popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

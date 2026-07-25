@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Geeves.Life — Universal Transparent Logo
+  Works on ANY background: dark, light, coloured, or mixed.
+
+  Technique:
+  • White "Geeves." + teal "Life" wordmark with a feDropShadow filter applied.
+    feDropShadow is the most universally supported SVG filter (Chrome, Firefox,
+    Safari, Edge, Google OAuth renderer, Figma, Sketch, etc.).
+  • The shadow is dark (near-black, semi-transparent) so it creates contrast
+    around the white letterforms on any light/white background.
+    On dark backgrounds the shadow blends in and is invisible — white text
+    is naturally readable against dark surfaces.
+  • "Life" uses brand teal which is saturated enough to read on both surfaces
+    with just a light shadow.
+  • The dot after "Geeves" is part of the wordmark (brand style).
+-->
+<svg xmlns="http://www.w3.org/2000/svg"
+     viewBox="0 0 1080 1080" width="1080" height="1080">
+  <defs>
+    <style>
+      .wm  { font-family: "Nunito", "Trebuchet MS", Arial, sans-serif; font-weight: 800; font-size: 124px; }
+      .tag { font-family: "Nunito", "Trebuchet MS", Arial, sans-serif; font-weight: 300; font-size: 30px; letter-spacing: 9px; }
+    </style>
+
+    <!-- Strong dark drop-shadow for white "Geeves." text -->
+    <filter id="shadow-strong" x="-15%" y="-40%" width="130%" height="180%">
+      <feDropShadow dx="0" dy="0" stdDeviation="8" flood-color="#0d0f12" flood-opacity="0.80"/>
+    </filter>
+
+    <!-- Light dark drop-shadow for teal "Life" and tagline -->
+    <filter id="shadow-light" x="-15%" y="-40%" width="130%" height="180%">
+      <feDropShadow dx="0" dy="0" stdDeviation="5" flood-color="#0d0f12" flood-opacity="0.50"/>
+    </filter>
+  </defs>
+
+  <!-- NO background rect — fully transparent -->
+
+  <!-- ── CONSTELLATION MARK ── -->
+  <!-- Roof lines -->
+  <line x1="540" y1="175" x2="350" y2="310" stroke="#2AAFA9" stroke-width="8" stroke-linecap="round"/>
+  <line x1="540" y1="175" x2="730" y2="310" stroke="#2AAFA9" stroke-width="8" stroke-linecap="round"/>
+  <!-- Verticals -->
+  <line x1="350" y1="310" x2="350" y2="530" stroke="#E8624A" stroke-width="8" stroke-linecap="round"/>
+  <line x1="730" y1="310" x2="730" y2="530" stroke="#D4A017" stroke-width="8" stroke-linecap="round"/>
+  <!-- Base horizontals -->
+  <line x1="350" y1="530" x2="470" y2="530" stroke="#8B5CF6" stroke-width="8" stroke-linecap="round"/>
+  <line x1="610" y1="530" x2="730" y2="530" stroke="#4F7EC4" stroke-width="8" stroke-linecap="round"/>
+  <!-- Arch -->
+  <path d="M 470,530 L 470,460 C 470,421.339 501.339,390 540,390 C 578.661,390 610,421.339 610,460 L 610,530"
+        fill="none" stroke="#2AAFA9" stroke-width="8" stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Inner stem -->
+  <line x1="540" y1="390" x2="540" y2="530" stroke="#2AAFA9" stroke-width="8" stroke-linecap="round"/>
+  <line x1="540" y1="530" x2="540" y2="640" stroke="#E8943A" stroke-width="8" stroke-linecap="round"/>
+  <!-- Nodes -->
+  <circle cx="540" cy="175" r="36" fill="#2AAFA9"/>
+  <circle cx="350" cy="310" r="30" fill="#E8624A"/>
+  <circle cx="730" cy="310" r="30" fill="#D4A017"/>
+  <circle cx="540" cy="390" r="22" fill="#2AAFA9"/>
+  <circle cx="350" cy="530" r="30" fill="#8B5CF6"/>
+  <circle cx="730" cy="530" r="30" fill="#4F7EC4"/>
+  <circle cx="540" cy="640" r="26" fill="transparent" stroke="#E8943A" stroke-width="8"/>
+
+  <!-- ── WORDMARK ──
+       Each word is a separate <text> element with its own filter so shadow
+       weights can differ. Both are centred together using x positions derived
+       from the viewBox width (1080) and approximate glyph widths.
+       "Geeves." ≈ 390px wide at font-size 124
+       "Life"    ≈ 172px wide at font-size 124
+       Total ≈ 562px → each half = 281px from centre (x=540)
+       "Geeves." right edge at 540, so left edge at 540-390 = 150 → text-anchor="end" at x=540
+       "Life"    left edge at 540 → text-anchor="start" at x=540
+  -->
+
+  <!-- "Geeves." — white, strong shadow -->
+  <text class="wm" x="538" y="856" text-anchor="end"
+        fill="#FFFFFF" filter="url(#shadow-strong)">Geeves.</text>
+
+  <!-- "Life" — brand teal, light shadow -->
+  <text class="wm" x="542" y="856" text-anchor="start"
+        fill="#2AAFA9" filter="url(#shadow-light)">Life</text>
+
+  <!-- ── TAGLINE ── -->
+  <text class="tag" x="540" y="912" text-anchor="middle"
+        fill="#9CA3AF" filter="url(#shadow-light)">OPERATING SYSTEM</text>
+
+</svg>
