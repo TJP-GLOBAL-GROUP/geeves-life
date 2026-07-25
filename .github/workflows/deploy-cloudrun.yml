@@ -1,0 +1,85 @@
+# Deploy geeves.life beta to Google Cloud Run on every push to main.
+# Auth: Workload Identity Federation (keyless — no SA JSON keys in GitHub).
+# Secrets: all sensitive values live in GCP Secret Manager, injected at runtime.
+name: Deploy beta → Cloud Run
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+  GCP_REGION: us-central1
+  AR_REPO: geeves
+  SERVICE: geeves-beta
+
+jobs:
+  deploy:
+    name: Build, push, deploy
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write   # required for Workload Identity Federation
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # ── Authenticate to GCP via Workload Identity Federation ──────────────────
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
+          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+
+      - name: Set up gcloud CLI
+        uses: google-github-actions/setup-gcloud@v2
+
+      # ── Build & push Docker image to Artifact Registry ────────────────────────
+      - name: Configure Docker for Artifact Registry
+        run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev --quiet
+
+      - name: Build and push image
+        run: |
+          IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.SERVICE }}:${{ github.sha }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+          echo "IMAGE=$IMAGE" >> $GITHUB_ENV
+
+      # ── Deploy to Cloud Run (secrets injected from Secret Manager) ────────────
+      - name: Deploy to Cloud Run
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image "$IMAGE" \
+            --region "${{ env.GCP_REGION }}" \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 1Gi \
+            --cpu 1 \
+            --min-instances 0 \
+            --max-instances 5 \
+            --timeout 300 \
+            --service-account "${{ env.SERVICE }}-runtime@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+            --set-env-vars "NODE_ENV=production,APP_URL=https://beta.geeves.life,VITE_APP_URL=https://beta.geeves.life,VITE_APP_ID=geeves-beta,GCS_PROJECT_ID=${{ env.GCP_PROJECT_ID }},GCS_BUCKET_NAME=geeves-beta-assets,GCS_BUCKET_UPLOADS=geeves-beta-uploads,GCS_BUCKET_BACKUPS=geeves-beta-backups,GCS_BUCKET_EXPORTS=geeves-beta-exports,GUARDIAN_ENABLED=true,GUARDIAN_ALERT_EMAIL=tarik@geeves.life,SHADOW_BLOCK_ENGINE_ENABLED=false" \
+            --set-secrets "DATABASE_URL=geeves-beta-database-url:latest,EDIT_SECRET=geeves-edit-secret:latest,SYSTEM_CRON_SECRET=geeves-cron-secret:latest,JWT_SECRET=geeves-jwt-secret:latest,RESEND_API_KEY=geeves-resend-api-key:latest,GOOGLE_CLIENT_ID=geeves-google-client-id:latest,GOOGLE_CLIENT_SECRET=geeves-google-client-secret:latest,GOOGLE_APPLICATION_CREDENTIALS_JSON=geeves-gcs-credentials:latest"
+
+      # ── Smoke test ────────────────────────────────────────────────────────────
+      - name: Smoke check /api/health
+        run: |
+          URL=$(gcloud run services describe ${{ env.SERVICE }} \
+            --region ${{ env.GCP_REGION }} \
+            --format='value(status.url)')
+          echo "Service URL: $URL"
+          for i in 1 2 3 4 5; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "$URL/api/health")
+            if [ "$STATUS" = "200" ]; then
+              echo "Health check passed (attempt $i)"
+              exit 0
+            fi
+            echo "Attempt $i: HTTP $STATUS — retrying in 10s..."
+            sleep 10
+          done
+          echo "Health check failed after 5 attempts"
+          exit 1
