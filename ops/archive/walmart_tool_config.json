@@ -1,0 +1,11 @@
+{
+  "verticals": [
+    {"id": "UfmDSlxi_mQy-VJFKz-HE", "name": "Home & Family", "icon": "home", "color": "#E8624A", "categoryKey": "Home_Family"},
+    {"id": "m7Qxr9EAWhUZpwu7v1ksM", "name": "Maxfield Bakery", "icon": "briefcase", "color": "#4F7EC4", "categoryKey": "Maxfield_Bakery"},
+    {"id": "DoaIiOvcamX4S-I5-avVf", "name": "Maxfield Market", "icon": "shopping-cart", "color": "#D4A017", "categoryKey": "Maxfield_Market"},
+    {"id": "oEgAguztpOHxUryoPTC6I", "name": "Personal", "icon": "user", "color": "#8B5CF6", "categoryKey": "Personal"},
+    {"id": "CEwJqO2UxReljXLbLKLry", "name": "StartOut", "icon": "globe", "color": "#E8943A", "categoryKey": "StartOut"},
+    {"id": "bohemian-lodges", "name": "Bohemian Lodges", "icon": "building", "color": "#2DD4BF", "categoryKey": "Bohemian_Lodges"}
+  ],
+  "properties": ["Morabeza", "Sunset Studio", "The Artiste's Boutique", "Penthouse", "Sunset Studio + Morabeza", "All Properties"]
+}

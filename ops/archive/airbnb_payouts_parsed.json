@@ -1,0 +1,616 @@
+[
+  {
+    "payout_date": "2025-07-18",
+    "total_amount": 117.76,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Richard Rudden",
+        "amount": 117.76,
+        "description": "Home",
+        "check_in": "2025-07-17",
+        "check_out": "2025-07-18",
+        "property_name": "The Seneca Sunsets Studio",
+        "listing_id": "1463348826001534356",
+        "confirmation_code": "HM3MSQPXHF"
+      }
+    ],
+    "payout_id": "G-VJ2OUMLQPMA3P",
+    "bank_account": "",
+    "_email_id": "1981e9306197fc34",
+    "_subject": "A $117.76 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-07-28",
+    "total_amount": 230.32,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Julio Romero",
+        "amount": 230.32,
+        "description": "Home",
+        "check_in": "2025-07-27",
+        "check_out": "2025-07-30",
+        "property_name": "The Seneca Sunsets Studio",
+        "listing_id": "1463348826001534356",
+        "confirmation_code": "HMBYYT3JCN"
+      }
+    ],
+    "payout_id": "G-FPVPMO2MSE3PV",
+    "bank_account": "",
+    "_email_id": "19852123529d0f50",
+    "_subject": "A $230.32 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-07-28",
+    "total_amount": 406.49,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Sahar Tal",
+        "amount": 388.49,
+        "description": "Home",
+        "check_in": "2025-07-27",
+        "check_out": "2025-07-29",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMC48NQ22Y"
+      },
+      {
+        "guest_name": "Sahar Tal",
+        "amount": 18.0,
+        "description": "Pass Through Tot",
+        "check_in": "2025-07-27",
+        "check_out": "2025-07-29",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMC48NQ22Y"
+      }
+    ],
+    "payout_id": "G-6XLTAJGC2ZSFE",
+    "bank_account": "",
+    "_email_id": "19852b699523d779",
+    "_subject": "A $406.49 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-07-31",
+    "total_amount": 550.8,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Shaun Bee",
+        "amount": 514.8,
+        "description": "Home",
+        "check_in": "2025-07-30",
+        "check_out": "2025-08-03",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMYSS54TMX"
+      },
+      {
+        "guest_name": "Shaun Bee",
+        "amount": 36.0,
+        "description": "Pass Through Tot",
+        "check_in": "2025-07-30",
+        "check_out": "2025-08-03",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMYSS54TMX"
+      }
+    ],
+    "payout_id": "G-LZ7DIVEEHMIUI",
+    "bank_account": "",
+    "_email_id": "1986229d622d8683",
+    "_subject": "A $550.80 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-08-02",
+    "total_amount": 369.91,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Sandra Brock",
+        "amount": 369.91,
+        "description": "Home",
+        "check_in": "2025-08-01",
+        "check_out": "2025-08-04",
+        "property_name": "The Seneca Sunsets Studio",
+        "listing_id": "1463348826001534356",
+        "confirmation_code": "HMHXFZHWQ2"
+      }
+    ],
+    "payout_id": "G-24NK6YADH2KCX",
+    "bank_account": "",
+    "_email_id": "1986bd1c4c12d938",
+    "_subject": "A $369.91 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-08-04",
+    "total_amount": 428.29,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Albert Vinson",
+        "amount": 404.29,
+        "description": "Home",
+        "check_in": "2025-08-03",
+        "check_out": "2025-08-06",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMEFRDYYBM"
+      },
+      {
+        "guest_name": "Albert Vinson",
+        "amount": 24.0,
+        "description": "Pass Through Tot",
+        "check_in": "2025-08-03",
+        "check_out": "2025-08-06",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMEFRDYYBM"
+      }
+    ],
+    "payout_id": "G-NNRTX3KQRAKQJ",
+    "bank_account": "",
+    "_email_id": "19876c31aee251eb",
+    "_subject": "A $428.29 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-08-09",
+    "total_amount": 450.78,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Nick Marco",
+        "amount": 450.78,
+        "description": "Home",
+        "check_in": "2025-08-08",
+        "check_out": "2025-08-10",
+        "property_name": "Morabeza: A Tropical Seneca Haven",
+        "listing_id": "1463321091671619598",
+        "confirmation_code": "HMBZ5YCWH8"
+      }
+    ],
+    "payout_id": "G-C7XCI6PQYRHWB",
+    "bank_account": "",
+    "_email_id": "1988fde67fd17ce6",
+    "_subject": "A $450.78 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-08-10",
+    "total_amount": 324.51,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Seth Boss",
+        "amount": 324.51,
+        "description": "Home",
+        "check_in": "2025-08-09",
+        "check_out": "2025-08-12",
+        "property_name": "The Seneca Sunsets Studio",
+        "listing_id": "1463348826001534356",
+        "confirmation_code": "HM8YXH2BMC"
+      }
+    ],
+    "payout_id": "G-MMIX5CBPK3VMG",
+    "bank_account": "",
+    "_email_id": "1989504efee35cfe",
+    "_subject": "A $324.51 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-08-15",
+    "total_amount": 277.59,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Connor Rossman",
+        "amount": 277.59,
+        "description": "Home",
+        "check_in": "2025-08-14",
+        "check_out": "2025-08-17",
+        "property_name": "The Seneca Sunsets Studio",
+        "listing_id": "1463348826001534356",
+        "confirmation_code": "HMC5AF9DYX"
+      }
+    ],
+    "payout_id": "G-GMBVASEA4O4DL",
+    "bank_account": "",
+    "_email_id": "198aec487bf1321b",
+    "_subject": "A $277.59 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-08-22",
+    "total_amount": 1298.11,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Shauna Holung",
+        "amount": 49.0,
+        "description": "Pass Through Tot",
+        "check_in": "2025-08-21",
+        "check_out": "2025-08-28",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMMY4H4AKN"
+      },
+      {
+        "guest_name": "Shauna Holung",
+        "amount": 1249.11,
+        "description": "Home",
+        "check_in": "2025-08-21",
+        "check_out": "2025-08-28",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMMY4H4AKN"
+      }
+    ],
+    "payout_id": "G-C2IE6CRRJKSFT",
+    "bank_account": "",
+    "_email_id": "198d375aff2b568a",
+    "_subject": "A $1,298.11 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-08-23",
+    "total_amount": 582.1,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Joseph Manning",
+        "amount": 254.24,
+        "description": "Home",
+        "check_in": "2025-08-22",
+        "check_out": "2025-08-24",
+        "property_name": "The Seneca Sunsets Studio",
+        "listing_id": "1463348826001534356",
+        "confirmation_code": "HM2HQPBBRF"
+      },
+      {
+        "guest_name": "Phil Valenti",
+        "amount": 327.86,
+        "description": "Home",
+        "check_in": "2025-08-22",
+        "check_out": "2025-08-24",
+        "property_name": "Morabeza:A Tropical Seneca Haven",
+        "listing_id": "1463321091671619598",
+        "confirmation_code": "HMDEYRPK3J"
+      }
+    ],
+    "payout_id": "G-OXAVKD5ZB5B4J",
+    "bank_account": "",
+    "_email_id": "198d7f74a73cad64",
+    "_subject": "A $582.10 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-08-30",
+    "total_amount": 422.84,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Scott Steinbacher",
+        "amount": 422.84,
+        "description": "Home",
+        "check_in": "2025-08-29",
+        "check_out": "2025-08-31",
+        "property_name": "Morabeza:A Tropical Seneca Haven",
+        "listing_id": "1463321091671619598",
+        "confirmation_code": "HMF85XH4WR"
+      }
+    ],
+    "payout_id": "G-YWN5XID2WIPDI",
+    "bank_account": "",
+    "_email_id": "198fc03db2679534",
+    "_subject": "A $422.84 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-09-06",
+    "total_amount": 45,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "",
+        "amount": 45,
+        "description": "Resolution Payout",
+        "check_in": "",
+        "check_out": "",
+        "property_name": "",
+        "listing_id": "1258375",
+        "confirmation_code": ""
+      }
+    ],
+    "payout_id": "G-K2JDUQMDT6GZC",
+    "bank_account": "",
+    "_email_id": "1992144a3dfc01b3",
+    "_subject": "A $45.00 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-09-06",
+    "total_amount": 45,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Shauna",
+        "amount": 0,
+        "description": "3 sets of bed sheets",
+        "check_in": "2025-08-21",
+        "check_out": "2025-08-28",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "",
+        "confirmation_code": "HMMY4H4AKN"
+      },
+      {
+        "guest_name": "Shauna",
+        "amount": 0,
+        "description": "shower curtain rod",
+        "check_in": "2025-08-21",
+        "check_out": "2025-08-28",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "",
+        "confirmation_code": "HMMY4H4AKN"
+      },
+      {
+        "guest_name": "",
+        "amount": 45,
+        "description": "Payment total (reimbursement)",
+        "check_in": "",
+        "check_out": "",
+        "property_name": "",
+        "listing_id": "",
+        "confirmation_code": ""
+      }
+    ],
+    "payout_id": "CLSF-04900253",
+    "bank_account": "",
+    "_email_id": "1991c86b480d7bbf",
+    "_subject": "Reimbursement received: Airbnb paid $45\u00a0USD [CLSF-04900253]"
+  },
+  {
+    "payout_date": "2025-09-18",
+    "total_amount": 998.94,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Nicholas Esson",
+        "amount": 963.94,
+        "description": "Home",
+        "check_in": "2025-09-17",
+        "check_out": "2025-09-22",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMCYJ5A9YK"
+      },
+      {
+        "guest_name": "Nicholas Esson",
+        "amount": 35.0,
+        "description": "Pass Through Tot",
+        "check_in": "2025-09-17",
+        "check_out": "2025-09-22",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMCYJ5A9YK"
+      }
+    ],
+    "payout_id": "G-G75PCECJPNP4E",
+    "bank_account": "",
+    "_email_id": "1995e8180995f367",
+    "_subject": "A $998.94 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-09-28",
+    "total_amount": 151.37,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Jennifer Theis",
+        "amount": 151.37,
+        "description": "Home",
+        "check_in": "2025-09-27",
+        "check_out": "2025-09-28",
+        "property_name": "The Seneca Sunsets Studio",
+        "listing_id": "1463348826001534356",
+        "confirmation_code": "HMRPRZRRE9"
+      }
+    ],
+    "payout_id": "G-DVTVWDPK2NU55",
+    "bank_account": "",
+    "_email_id": "199915cac00a9f92",
+    "_subject": "A $151.37 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-10-03",
+    "total_amount": 423.89,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Marisa Rodriguez",
+        "amount": 423.89,
+        "description": "Home",
+        "check_in": "2025-10-02",
+        "check_out": "2025-10-05",
+        "property_name": "The Seneca Sunsets Studio",
+        "listing_id": "1463348826001534356",
+        "confirmation_code": "HMYSCDD3TT"
+      }
+    ],
+    "payout_id": "G-35TDN5DMSSD5W",
+    "bank_account": "",
+    "_email_id": "199ab1c8f381ee68",
+    "_subject": "A $423.89 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-10-11",
+    "total_amount": 769.6,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Jim Valentine",
+        "amount": 769.6,
+        "description": "Home",
+        "check_in": "2025-10-10",
+        "check_out": "2025-10-13",
+        "property_name": "Morabeza:A Tropical Seneca Haven",
+        "listing_id": "1463321091671619598",
+        "confirmation_code": "HMMC39SABZ"
+      }
+    ],
+    "payout_id": "G-THLGR3E64OQ5F",
+    "bank_account": "",
+    "_email_id": "199d44f4b4d3b14b",
+    "_subject": "A $769.60 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-10-13",
+    "total_amount": 100.49,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Jim Valentine",
+        "amount": 100.49,
+        "description": "Home",
+        "check_in": "2025-10-10",
+        "check_out": "2025-10-14",
+        "property_name": "Morabeza:A Tropical Seneca Haven",
+        "listing_id": "1463321091671619598",
+        "confirmation_code": "HMMC39SABZ"
+      }
+    ],
+    "payout_id": "G-T6OR4WFEOVTEX",
+    "bank_account": "",
+    "_email_id": "199dde35d105c6e6",
+    "_subject": "A $100.49 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-10-17",
+    "total_amount": 423.89,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Marleah Kares",
+        "amount": 423.89,
+        "description": "Home",
+        "check_in": "2025-10-16",
+        "check_out": "2025-10-19",
+        "property_name": "The Seneca Sunsets Studio",
+        "listing_id": "1463348826001534356",
+        "confirmation_code": "HMDT3FQEMY"
+      }
+    ],
+    "payout_id": "G-XS4YGL32ISUCU",
+    "bank_account": "",
+    "_email_id": "199f335b33291f56",
+    "_subject": "A $423.89 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-10-29",
+    "total_amount": 563.75,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Shalama Ferron",
+        "amount": 557.75,
+        "description": "Home",
+        "check_in": "2025-10-28",
+        "check_out": "2025-10-31",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMFHKBCCXE"
+      },
+      {
+        "guest_name": "Shalama Ferron",
+        "amount": 6.0,
+        "description": "Pass Through Tot",
+        "check_in": "2025-10-28",
+        "check_out": "2025-10-31",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMFHKBCCXE"
+      }
+    ],
+    "payout_id": "G-EICOCYRUPRYPH",
+    "bank_account": "",
+    "_email_id": "19a31a64606f351e",
+    "_subject": "A $563.75 USD payout was sent"
+  },
+  {
+    "payout_date": "2025-11-10",
+    "total_amount": 1346.78,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Guy Dreifuss",
+        "amount": 1325.78,
+        "description": "Home",
+        "check_in": "2025-11-09",
+        "check_out": "2025-11-16",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMMKTQ9CS5"
+      },
+      {
+        "guest_name": "Guy Dreifuss",
+        "amount": 21.0,
+        "description": "Pass Through Tot",
+        "check_in": "2025-11-09",
+        "check_out": "2025-11-16",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HMMKTQ9CS5"
+      }
+    ],
+    "payout_id": "G-BRIGWGASNMC52",
+    "bank_account": "Tarik Perkins, Savings 0108 (USD)",
+    "_email_id": "19a6f72b6e332888",
+    "_subject": "We sent a payout of $1,346.78 USD"
+  },
+  {
+    "payout_date": "2025-11-15",
+    "total_amount": 206.07,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Ross Levin",
+        "amount": 206.07,
+        "description": "Home",
+        "check_in": "2025-11-14",
+        "check_out": "2025-11-16",
+        "property_name": "The Seneca Sunsets Studio",
+        "listing_id": "1463348826001534356",
+        "confirmation_code": "HMWQWQFAME"
+      }
+    ],
+    "payout_id": "G-WCJDISJNSSOST",
+    "bank_account": "Tarik Perkins, Savings 0108 (USD)",
+    "_email_id": "19a88c4d156f9d83",
+    "_subject": "We sent a payout of $206.07 USD"
+  },
+  {
+    "payout_date": "2025-12-22",
+    "total_amount": 2401.18,
+    "currency": "USD",
+    "line_items": [
+      {
+        "guest_name": "Veera Belle",
+        "amount": 2335.18,
+        "description": "Home",
+        "check_in": "2025-12-21",
+        "check_out": "2026-01-01",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HM3ZDXS5PW"
+      },
+      {
+        "guest_name": "Veera Belle",
+        "amount": 66.0,
+        "description": "Pass Through Tot",
+        "check_in": "2025-12-21",
+        "check_out": "2026-01-01",
+        "property_name": "Bohemian Lodge| Artist's Boutique",
+        "listing_id": "1258375",
+        "confirmation_code": "HM3ZDXS5PW"
+      }
+    ],
+    "payout_id": "G-6ZYMUJVWZQAAM",
+    "bank_account": "Tarik Perkins, Savings 0108 (USD)",
+    "_email_id": "19b47bdd4f2de1c5",
+    "_subject": "We sent a payout of $2,401.18 USD"
+  }
+]
