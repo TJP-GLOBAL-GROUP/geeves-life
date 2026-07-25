@@ -1,0 +1,158 @@
+Geeves.Life — Gap Fill Prompt for Beta Sandbox
+All Remaining Fixes and New Features Post-Migration
+Date: 2026-07-25 For: Manus Team (beta.geeves.life sandbox) Priority Order: Critical → High → Medium → Low
+Section A: CRITICAL — Fix Immediately
+A1. Vertical Color Bug (expenseCategorisation.ts)
+Problem: All new users see gray vertical icons because colors are hardcoded to Tarik’s specific vertical IDs.
+Current code (lines ~613-627):
+// Vertical icon/color mappingconst VERTICAL_STYLES: Record<string, { icon: string; color: string }> = {  "tjpfam-vert-home": { icon: "home", color: "#E8624A" },  "tjpfam-vert-bakery": { icon: "briefcase", color: "#4F7EC4" },  "tjpfam-vert-market": { icon: "shopping-cart", color: "#D4A017" },  "tjpfam-vert-self": { icon: "user", color: "#8B5CF6" },  "tjpfam-vert-startout": { icon: "globe", color: "#E8943A" },  "c3pW-Cxhm9WAQZ17pTMb3": { icon: "building", color: "#2DD4BF" },};const verticals = (vertResult as any[]).map((v: any) => ({  id: v.id,  name: v.name,  icon: VERTICAL_STYLES[v.id]?.icon || "folder",  color: VERTICAL_STYLES[v.id]?.color || "#6B7280",}));
+Fix: The verticals are already queried from the database which has icon and color columns. Replace the entire VERTICAL_STYLES block with direct DB field access:
+const verticals = (vertResult as any[]).map((v: any) => ({  id: v.id,  name: v.name,  icon: v.icon || "folder",  color: v.color || "#6B7280",}));
+Impact: Every user with verticals not in the hardcoded map (which is everyone except Tarik) will now see their correct colors.
+A2. Invoice Bridge Endpoints (invoiceExtraction.ts)
+Problem: Chrome extension captures invoices into invoice_extractions table, but expense tool reads from vendor_orders. Captured invoices are invisible.
+Current endpoints: Only create exists.
+Add these endpoints:
+// Add to imports:import { expenses } from "../drizzle/schema";import { nanoid } from "nanoid";// Add to router:list: publicProcedure  .input(z.object({    householdId: z.string().min(1),    status: z.enum(["pending", "converted", "ignored"]).optional(),    limit: z.number().min(1).max(100).default(50),  }))  .query(async ({ input }) => {    const rows = await db.execute(sql`      SELECT * FROM invoice_extractions      WHERE householdId = ${input.householdId}      ${input.status ? sql`AND status = ${input.status}` : sql``}      ORDER BY capturedAt DESC      LIMIT ${input.limit}    `);    const result = Array.isArray(rows) ? rows[0] : rows;    return (result as any[]) || [];  }),convertToExpense: publicProcedure  .input(z.object({    extractionId: z.string().min(1),    propertyId: z.string().optional(),    memberId: z.string().optional(),    verticalId: z.string().min(1),    coaCategoryId: z.string().optional(),  }))  .mutation(async ({ input }) => {    const extRow = await db.execute(sql`      SELECT * FROM invoice_extractions WHERE id = ${input.extractionId}    `);    const extArr = Array.isArray(extRow) ? extRow[0] : extRow;    const extraction = (extArr as any[])?.[0];    if (!extraction) throw new TRPCError({ code: "NOT_FOUND", message: "Invoice extraction not found" });    const expenseId = nanoid();    await db.execute(sql`      INSERT INTO expenses (id, householdId, amount, currency, description, expenseDate, vendor, propertyId_exp, memberId, verticalId, coaCategoryId, source, status, createdAt)      VALUES (        ${expenseId},        ${extraction.householdId},        ${extraction.totalAmount || extraction.subtotal || 0},        ${extraction.currency || "USD"},        ${extraction.description || extraction.merchantName || "Invoice from capture"},        ${extraction.issueDate || new Date().toISOString().slice(0, 10)},        ${extraction.merchantName || extraction.vendor || "Unknown"},        ${input.propertyId || null},        ${input.memberId || null},        ${input.verticalId},        ${input.coaCategoryId || null},        'invoice_capture',        'uncategorized',        NOW()      )    `);    await db.execute(sql`      UPDATE invoice_extractions SET status = 'converted', convertedExpenseId = ${expenseId}, convertedAt = NOW()      WHERE id = ${input.extractionId}    `);    return { success: true, expenseId };  }),
+Also add convertedExpenseId and convertedAt columns to invoice_extractions table in schema.ts if not present.
+A3. Schema Migrations (3 new tables + columns)
+Run these migrations on the Cloud SQL database:
+-- 1. Platform fee configurations (auto-applied when user connects Airbnb/VRBO/Booking.com)CREATE TABLE IF NOT EXISTS platform_fee_configurations (  id VARCHAR(36) PRIMARY KEY,  householdId VARCHAR(36) NOT NULL,  platform VARCHAR(50) NOT NULL, -- 'airbnb', 'vrbo', 'bookingcom', 'direct'  feeType VARCHAR(50) NOT NULL DEFAULT 'host_pays', -- 'host_pays', 'split', 'guest_pays'  commissionPct DECIMAL(5,2) DEFAULT 0, -- e.g. 15.50 for Airbnb host-only  processingFeePct DECIMAL(5,2) DEFAULT 0, -- e.g. 3.00 for VRBO processing  processingFeeFixed DECIMAL(10,2) DEFAULT 0, -- fixed fee per booking  taxOnFees BOOLEAN DEFAULT FALSE,  isDefault BOOLEAN DEFAULT FALSE,  isActive BOOLEAN DEFAULT TRUE,  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,  UNIQUE KEY unique_platform_per_household (householdId, platform),  INDEX idx_household_platform (householdId, platform));-- 2. Per-vertical expense QBO overridesCREATE TABLE IF NOT EXISTS vertical_expense_configs (  id VARCHAR(36) PRIMARY KEY,  verticalId VARCHAR(36) NOT NULL,  householdId VARCHAR(36) NOT NULL,  defaultCoaCategoryId VARCHAR(36),  defaultQboClass VARCHAR(100),  defaultQboCustomer VARCHAR(100),  requireApproval BOOLEAN DEFAULT FALSE,  approvalThreshold DECIMAL(14,2),  receiptRequiredAbove DECIMAL(14,2) DEFAULT 25.00,  isActive BOOLEAN DEFAULT TRUE,  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,  UNIQUE KEY unique_vertical (verticalId),  INDEX idx_household (householdId));-- 3. Polymorphic assignment columns on expensesALTER TABLE expenses  ADD COLUMN IF NOT EXISTS assignableType VARCHAR(20) AFTER propertyId_exp,  ADD COLUMN IF NOT EXISTS assignableId VARCHAR(36) AFTER assignableType,  ADD INDEX idx_assignable (assignableType, assignableId);-- 4. Invoice extractions status trackingALTER TABLE invoice_extractions  ADD COLUMN IF NOT EXISTS status VARCHAR(20) DEFAULT 'pending',  ADD COLUMN IF NOT EXISTS convertedExpenseId VARCHAR(36),  ADD COLUMN IF NOT EXISTS convertedAt TIMESTAMP,  ADD INDEX idx_status (status),  ADD INDEX idx_household_status (householdId, status);-- 5. Seed default platform presets for existing households with connected platformsINSERT IGNORE INTO platform_fee_configurations (id, householdId, platform, commissionPct, processingFeePct, isDefault)SELECT   UUID(),  householdId,  'airbnb',  15.50,  0,  TRUEFROM calendar_connections WHERE provider = 'airbnb'GROUP BY householdId;INSERT IGNORE INTO platform_fee_configurations (id, householdId, platform, commissionPct, processingFeePct, isDefault)SELECT   UUID(),  householdId,  'vrbo',  5.00,  3.00,  TRUEFROM calendar_connections WHERE provider = 'vrbo'GROUP BY householdId;
+Section B: HIGH — Shadow Block Hardening
+B1. P-1: Loud verticalId Error (eventPropagation.ts ~line 272)
+Current:
+if (!srcCal || !srcCal.verticalId) {  console.log(`[Propagation] Event ${eventId} calendar has no vertical — skipping propagation`);  return; // no vertical → no propagation}
+Problem: This silently aborts. If a calendar temporarily loses its verticalId (DB race condition, migration), events stop propagating with no retry.
+Fix:
+if (!srcCal || !srcCal.verticalId) {  console.error(`[Propagation] CRITICAL: Event ${eventId} calendar ${srcCal?.id} has no verticalId. Propagation aborted.`);  // Throw so the caller can retry via queue  throw new Error(`Calendar ${srcCal?.id || 'unknown'} has no verticalId — cannot propagate event ${eventId}`);}
+Note: Ensure the caller (webhook handler, mutation resolver) has a retry queue. The calendarWebhook.ts already handles errors gracefully — this throw will trigger its retry logic.
+B2. P-3: Batch Calendar Access (eventPropagation.ts ~line 607 + db.ts)
+Current:
+async function shouldExcludeForMember(memberId: string, verticalId: string): Promise<boolean> {  const rule = await db.getMemberCalendarAccess({ memberId, verticalId });  // ...}
+Problem: Called once per target calendar. With 100 targets = 100 sequential DB round-trips.
+Fix — Add to db.ts:
+export async function getAllMemberCalendarAccessForHousehold(  householdId: string): Promise<Array<{ memberId: string; verticalId: string; access: string }>> {  const rows = await db.execute(sql`    SELECT memberId, verticalId, access     FROM member_calendar_access     WHERE householdId = ${householdId}  `);  const result = Array.isArray(rows) ? rows[0] : rows;  return (result as any[]) || [];}
+Fix — Update eventPropagation.ts:
+// In onEventUpserted, after loading allCalendars and allVerticals:const allAccessRules = await db.getAllMemberCalendarAccessForHousehold(  srcCal.householdId || (allCalendars.find(c => c.householdId)?.householdId));// Replace shouldExcludeForMember:function shouldExcludeForMember(memberId: string, verticalId: string): boolean {  const rule = allAccessRules.find(    r => r.memberId === memberId && r.verticalId === verticalId  );  if (!rule) return false; // default: allow  return rule.access === 'denied';}
+B3. P-4b: DST-Safe End Date (eventPropagation.ts ~line 420)
+Current:
+? { date: new Date(Number(event.endTime) + 86400000).toISOString().slice(0, 10) }
+Problem: Adding 86400000 (24 hours in ms) fails across DST transitions. Event appears on wrong day in Google Calendar.
+Fix:
+? { date: (() => {    const d = new Date(Number(event.endTime));    d.setUTCDate(d.getUTCDate() + 1);    return d.toISOString().slice(0, 10);  })() }
+B4. Webhook Token Validation (calendarWebhook.ts)
+Problem: Webhook endpoint accepts any push notification. No validation of Google’s channel token.
+Fix — Add at the top of the webhook handler:
+import { ENV } from "../_core/env";const ENABLE_WEBHOOK_TOKEN_CHECK = ENV.enableWebhookTokenCheck === "true";// In the webhook handler function, before processing:if (ENABLE_WEBHOOK_TOKEN_CHECK) {  const channelToken = req.headers["x-goog-channel-token"];  const storedToken = await db.getWebhookToken(req.headers["x-goog-channel-id"] as string);  if (!storedToken || storedToken !== channelToken) {    console.warn(`[Webhook] Invalid token for channel ${req.headers["x-goog-channel-id"]}`);    res.status(403).send("Invalid token");    return;  }}
+Add to schema:
+CREATE TABLE IF NOT EXISTS webhook_tokens (  channelId VARCHAR(100) PRIMARY KEY,  token VARCHAR(255) NOT NULL,  calendarId VARCHAR(36) NOT NULL,  expiresAt TIMESTAMP,  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  INDEX idx_calendar (calendarId));
+Add to .env:
+ENABLE_WEBHOOK_TOKEN_CHECK=false  # Set to true after verifying tokens are stored correctly
+Section C: MEDIUM — New Feature Files
+C1. platformReconciliation.ts — Auto-Reconciliation Engine
+Create server/services/platformReconciliation.ts:
+/** * Platform Reconciliation Engine * Compares platform booking data (Airbnb/VRBO/Booking.com) against * internal records and flags discrepancies. */import { sql } from "drizzle-orm";import * as db from "../db";interface ReconciliationResult {  bookingId: string;  platform: string;  expectedNet: number;  actualNet: number;  discrepancy: number;  discrepancyPct: number;  issues: string[];  status: "matched" | "minor" | "flagged" | "missing";}/** * Calculate expected net payout for a booking based on platform fee config. */export async function reconcileBooking(  bookingId: string,  householdId: string): Promise<ReconciliationResult> {  const [bookingRow, configRow] = await Promise.all([    db.execute(sql`SELECT * FROM bookings WHERE id = ${bookingId}`),    db.execute(sql`      SELECT * FROM platform_fee_configurations       WHERE householdId = ${householdId}       AND platform = (SELECT platform FROM bookings WHERE id = ${bookingId})      AND isActive = TRUE      LIMIT 1    `),  ]);  const booking = (Array.isArray(bookingRow) ? bookingRow[0] : bookingRow)?.[0];  const config = (Array.isArray(configRow) ? configRow[0] : configRow)?.[0];  if (!booking) {    return { bookingId, platform: "unknown", expectedNet: 0, actualNet: 0, discrepancy: 0, discrepancyPct: 0, issues: ["Booking not found"], status: "missing" };  }  const gross = Number(booking.totalAmount || 0);  const platformFee = config     ? gross * (Number(config.commissionPct || 0) / 100) + gross * (Number(config.processingFeePct || 0) / 100) + Number(config.processingFeeFixed || 0)    : gross * 0.155; // Default Airbnb 15.5%    const expectedNet = gross - platformFee;  const actualNet = Number(booking.hostPayout || booking.netAmount || 0);  const discrepancy = expectedNet - actualNet;  const discrepancyPct = actualNet > 0 ? Math.abs(discrepancy / actualNet) * 100 : 0;  const issues: string[] = [];  if (discrepancyPct > 5) issues.push(`Large discrepancy: ${discrepancyPct.toFixed(1)}%`);  if (!config) issues.push("No fee config found — using default 15.5%");  if (!booking.hostPayout && !booking.netAmount) issues.push("No payout amount recorded");  const tolerancePct = Number(config?.reconciliationTolerancePct || 2);  const status: ReconciliationResult["status"] =     discrepancyPct <= tolerancePct ? "matched" :    discrepancyPct <= tolerancePct * 2 ? "minor" : "flagged";  return { bookingId, platform: booking.platform, expectedNet, actualNet, discrepancy, discrepancyPct, issues, status };}/** * Reconcile all bookings for a property within a date range. */export async function reconcilePropertyBookings(  propertyId: string,  startDate: string,  endDate: string): Promise<ReconciliationResult[]> {  const bookingsRow = await db.execute(sql`    SELECT id FROM bookings     WHERE propertyId = ${propertyId}     AND checkIn >= ${startDate}     AND checkIn <= ${endDate}    ORDER BY checkIn  `);  const bookings = Array.isArray(bookingsRow) ? bookingsRow[0] : bookingsRow;  const bookingIds = ((bookings as any[]) || []).map(b => b.id);  // Get householdId from property  const propRow = await db.execute(sql`SELECT householdId FROM properties WHERE id = ${propertyId}`);  const householdId = (Array.isArray(propRow) ? propRow[0] : propRow)?.[0]?.householdId;  const results = await Promise.all(    bookingIds.map(id => reconcileBooking(id, householdId))  );  return results;}
+C2. platformConfig.ts — CRUD Router for Platform Fee Configs
+Create server/routers/platformConfig.ts (or add to existing routers):
+import { router, publicProcedure } from "../trpc";import { z } from "zod";import { TRPCError } from "@trpc/server";import * as db from "../db";import { sql } from "drizzle-orm";export const platformConfigRouter = router({  list: publicProcedure    .input(z.object({ householdId: z.string().min(1) }))    .query(async ({ input }) => {      const rows = await db.execute(sql`        SELECT * FROM platform_fee_configurations         WHERE householdId = ${input.householdId}        ORDER BY platform      `);      return (Array.isArray(rows) ? rows[0] : rows) as any[] || [];    }),  upsert: publicProcedure    .input(z.object({      id: z.string().optional(),      householdId: z.string().min(1),      platform: z.enum(["airbnb", "vrbo", "bookingcom", "direct"]),      feeType: z.enum(["host_pays", "split", "guest_pays"]).default("host_pays"),      commissionPct: z.number().min(0).max(100).default(0),      processingFeePct: z.number().min(0).max(100).default(0),      processingFeeFixed: z.number().min(0).default(0),      taxOnFees: z.boolean().default(false),      isActive: z.boolean().default(true),    }))    .mutation(async ({ input }) => {      if (input.id) {        await db.execute(sql`          UPDATE platform_fee_configurations SET            feeType = ${input.feeType},            commissionPct = ${input.commissionPct},            processingFeePct = ${input.processingFeePct},            processingFeeFixed = ${input.processingFeeFixed},            taxOnFees = ${input.taxOnFees},            isActive = ${input.isActive},            updatedAt = NOW()          WHERE id = ${input.id}        `);        return { id: input.id, updated: true };      } else {        const id = require("nanoid").nanoid();        await db.execute(sql`          INSERT INTO platform_fee_configurations           (id, householdId, platform, feeType, commissionPct, processingFeePct, processingFeeFixed, taxOnFees, isActive)          VALUES (${id}, ${input.householdId}, ${input.platform}, ${input.feeType}, ${input.commissionPct}, ${input.processingFeePct}, ${input.processingFeeFixed}, ${input.taxOnFees}, ${input.isActive})        `);        return { id, created: true };      }    }),  delete: publicProcedure    .input(z.object({ id: z.string().min(1) }))    .mutation(async ({ input }) => {      await db.execute(sql`DELETE FROM platform_fee_configurations WHERE id = ${input.id}`);      return { deleted: true };    }),});
+C3. Enhanced Onboarding (onboarding.ts)
+Create server/routers/onboarding.ts:
+/** * Enhanced Onboarding Router * 6-step flow: Household → Profile → Calendars → Platforms → Verticals → Complete * Auto-applies platform presets on platform connection. */import { router, publicProcedure } from "../trpc";import { z } from "zod";import { TRPCError } from "@trpc/server";import * as db from "../db";import { sql } from "drizzle-orm";export const onboardingRouter = router({  /**   * Step 1: Create household + first admin member   */  createHousehold: publicProcedure    .input(z.object({      householdName: z.string().min(1).max(100),      adminName: z.string().min(1).max(100),      adminEmail: z.string().email(),      adminPronouns: z.string().optional(),    }))    .mutation(async ({ ctx, input }) => {      const householdId = require("nanoid").nanoid();      const memberId = require("nanoid").nanoid();            await db.execute(sql`        INSERT INTO households (id, name, createdAt) VALUES (${householdId}, ${input.householdName}, NOW())      `);      await db.execute(sql`        INSERT INTO household_members (id, householdId, userId, displayName, email, role, pronouns, createdAt)        VALUES (${memberId}, ${householdId}, ${ctx.user.id}, ${input.adminName}, ${input.adminEmail}, 'household_admin', ${input.adminPronouns || null}, NOW())      `);            return { householdId, memberId };    }),  /**   * Step 2: Complete member profile   */  completeProfile: publicProcedure    .input(z.object({      memberId: z.string().min(1),      dob: z.string().optional(),      phoneNumbers: z.string().optional(),      avatarUrl: z.string().optional(),    }))    .mutation(async ({ input }) => {      await db.execute(sql`        UPDATE household_members SET          dob = ${input.dob || null},          phoneNumbers = ${input.phoneNumbers || null},          avatarUrl = ${input.avatarUrl || null}        WHERE id = ${input.memberId}      `);      return { updated: true };    }),  /**   * Step 3: Record calendar connection   */  connectCalendar: publicProcedure    .input(z.object({      householdId: z.string().min(1),      provider: z.enum(["google", "airbnb", "vrbo", "bookingcom", "ical"]),      calendarId: z.string().min(1),      name: z.string().min(1),      verticalId: z.string().min(1),      shadowBlocking: z.boolean().default(true),      shadowSource: z.boolean().default(true),    }))    .mutation(async ({ input }) => {      const id = require("nanoid").nanoid();      await db.execute(sql`        INSERT INTO calendar_connections         (id, householdId, provider, externalId, name, verticalId, shadowBlocking, shadowSource, createdAt)        VALUES (${id}, ${input.householdId}, ${input.provider}, ${input.calendarId}, ${input.name}, ${input.verticalId}, ${input.shadowBlocking}, ${input.shadowSource}, NOW())      `);            // Auto-apply platform fee preset if this is a platform calendar      if (["airbnb", "vrbo", "bookingcom"].includes(input.provider)) {        await autoApplyPlatformPreset(input.householdId, input.provider);      }            return { id, calendarConnected: true };    }),  /**   * Step 4: Create verticals with colors   */  createVerticals: publicProcedure    .input(z.object({      householdId: z.string().min(1),      verticals: z.array(z.object({        name: z.string().min(1),        color: z.string().regex(/^#[0-9A-Fa-f]{6}$/),        icon: z.string().min(1),      })).min(1).max(20),    }))    .mutation(async ({ input }) => {      const ids: string[] = [];      for (const v of input.verticals) {        const id = require("nanoid").nanoid();        await db.execute(sql`          INSERT INTO verticals (id, householdId, name, color, icon, createdAt)          VALUES (${id}, ${input.householdId}, ${v.name}, ${v.color}, ${v.icon}, NOW())        `);        ids.push(id);      }      return { verticalIds: ids };    }),  /**   * Step 5: Configure vertical financial settings   */  configureVerticalFinancials: publicProcedure    .input(z.object({      householdId: z.string().min(1),      verticalId: z.string().min(1),      currency: z.string().default("USD"),      reconciliationToleranceAbs: z.number().default(1.00),      reconciliationTolerancePct: z.number().default(2.00),    }))    .mutation(async ({ input }) => {      await db.execute(sql`        INSERT INTO vertical_financial_settings         (householdId, verticalId, currency, reconciliationToleranceAbs, reconciliationTolerancePct, updatedAt)        VALUES (${input.householdId}, ${input.verticalId}, ${input.currency}, ${input.reconciliationToleranceAbs}, ${input.reconciliationTolerancePct}, NOW())        ON DUPLICATE KEY UPDATE          currency = VALUES(currency),          reconciliationToleranceAbs = VALUES(reconciliationToleranceAbs),          reconciliationTolerancePct = VALUES(reconciliationTolerancePct),          updatedAt = NOW()      `);      return { configured: true };    }),  /**   * Step 6: Mark onboarding complete   */  complete: publicProcedure    .input(z.object({ householdId: z.string().min(1) }))    .mutation(async ({ input }) => {      await db.execute(sql`        UPDATE households SET onboardingComplete = TRUE, onboardingCompletedAt = NOW()        WHERE id = ${input.householdId}      `);      return { onboardingComplete: true };    }),  /**   * Get onboarding status   */  status: publicProcedure    .input(z.object({ householdId: z.string().min(1) }))    .query(async ({ input }) => {      const row = await db.execute(sql`        SELECT onboardingComplete, onboardingCompletedAt FROM households WHERE id = ${input.householdId}      `);      const result = (Array.isArray(row) ? row[0] : row)?.[0];      return {        complete: result?.onboardingComplete === true || result?.onboardingComplete === 1,        completedAt: result?.onboardingCompletedAt,      };    }),});/** * Auto-apply platform fee preset when a user connects a platform calendar. */async function autoApplyPlatformPreset(householdId: string, platform: string): Promise<void> {  const existing = await db.execute(sql`    SELECT id FROM platform_fee_configurations     WHERE householdId = ${householdId} AND platform = ${platform}    LIMIT 1  `);  if ((Array.isArray(existing) ? existing[0] : existing)?.[0]) return; // Already configured  const presets: Record<string, { commissionPct: number; processingFeePct: number; processingFeeFixed: number }> = {    airbnb: { commissionPct: 15.50, processingFeePct: 0, processingFeeFixed: 0 },    vrbo: { commissionPct: 5.00, processingFeePct: 3.00, processingFeeFixed: 0 },    bookingcom: { commissionPct: 15.00, processingFeePct: 0, processingFeeFixed: 0 },  };  const preset = presets[platform];  if (!preset) return;  const id = require("nanoid").nanoid();  await db.execute(sql`    INSERT INTO platform_fee_configurations     (id, householdId, platform, commissionPct, processingFeePct, processingFeeFixed, isDefault, isActive)    VALUES (${id}, ${householdId}, ${platform}, ${preset.commissionPct}, ${preset.processingFeePct}, ${preset.processingFeeFixed}, TRUE, TRUE)  `);  console.log(`[Onboarding] Auto-applied ${platform} fee preset for household ${householdId}`);}
+Wire into routers.ts:
+import { onboardingRouter } from "./onboarding";import { platformConfigRouter } from "./platformConfig";// In appRouter:onboarding: onboardingRouter,platformConfig: platformConfigRouter,
+Section D: LOW — Nice to Have
+D1. Per-Calendar Softer Cap Landing
+When a calendar hits the 200/hour cap, instead of throwing, queue the remaining blocks for delayed processing:
+// In eventPropagation.ts, where PER_CALENDAR_HOURLY_CAP is checked:if (hourlyCount > PER_CALENDAR_HOURLY_CAP) {  console.warn(`[Propagation] Calendar ${tgt.id} hit hourly cap. ${targets.length - i} blocks queued for retry.`);  // Queue remaining for delayed processing (5-min delay)  await queueDelayedPropagation(eventId, targets.slice(i), 5 * 60 * 1000);  break;}
+D2. Better verticalId Logging
+Include the calendar name and householdId in the verticalId error for easier debugging:
+console.error(`[Propagation] CRITICAL: Event ${eventId} on calendar "${srcCal.name}" (${srcCal.id}, household: ${srcCal.householdId}) has no verticalId.`);
+Section E: Active Guardian Note
+The Active Guardian governance system (639 lines, 7 guardrails GR-1 through GR-7) was documented in the GEEVES_V20_ALIGNMENT_PROMPT.md and GEEVES_V21_COMBINED_PROMPT.md. If this file is not yet present in the beta sandbox:
+Check server/activeGuardian.ts — if it exists, Guardian is integrated
+If missing, the full source is documented in the v2.0 alignment prompt documents already provided to the Manus team
+Guardian features: - GR-1: EA→Admin escalation detection - GR-2: Role promotion guard - GR-3: Shadow block propagation monitor - GR-4: Calendar sync health check - GR-5: Financial anomaly detection - GR-6: Data export authorization gate - GR-7: Emergency shutdown capability
+Section F: Verification
+After applying all fixes, run:
+node verify-fixes.js
+Target: 100% parity (all checks passing).
+Summary Table
+#
+Fix
+File
+Lines
+Priority
+Effort
+A1
+Vertical color fix
+expenseCategorisation.ts
+613-627
+CRITICAL
+5 min
+A2
+Invoice bridge endpoints
+invoiceExtraction.ts
+Add ~80 lines
+CRITICAL
+30 min
+A3
+Schema migrations
+SQL
+3 tables + columns
+CRITICAL
+15 min
+B1
+P-1 Loud verticalId error
+eventPropagation.ts
+272-275
+HIGH
+5 min
+B2
+P-3 Batch calendar access
+eventPropagation.ts + db.ts
+~20 lines
+HIGH
+20 min
+B3
+P-4b DST-safe end date
+eventPropagation.ts
+420
+HIGH
+5 min
+B4
+Webhook token validation
+calendarWebhook.ts
+~15 lines
+HIGH
+20 min
+C1
+Platform reconciliation engine
+platformReconciliation.ts
+New ~120 lines
+MEDIUM
+45 min
+C2
+Platform config CRUD
+platformConfig.ts
+New ~80 lines
+MEDIUM
+30 min
+C3
+Enhanced onboarding
+onboarding.ts
+New ~200 lines
+MEDIUM
+60 min
+D1
+Softer cap landing
+eventPropagation.ts
+~5 lines
+LOW
+10 min
+D2
+Better logging
+eventPropagation.ts
+~1 line
+LOW
+2 min
+Total estimated effort: ~4-5 hours for a single developer

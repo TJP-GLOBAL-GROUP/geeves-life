@@ -1,0 +1,178 @@
+Geeves.Life — Governance & Guardian Activation Prompt
+Full Cron Job Setup + Active Guardian Enablement for Beta Sandbox
+Date: 2026-07-25 For: Manus Team (beta.geeves.life sandbox) Purpose: Activate all 7 Active Guardian guardrails, configure cron jobs, enable health monitoring
+
+Section 1: Active Guardian Overview
+The Active Guardian system provides 7 automated guardrails that continuously monitor the platform for security, stability, and data integrity issues. It can auto-fix problems, escalate to human review, or trigger emergency shutdown.
+Guardrail
+ID
+Purpose
+Auto-Fix
+Escalation
+Role Escalation Detection
+GR-1
+Blocks EA→Admin promotion attempts
+✅ Block + Log
+Email to tarik@
+Role Promotion Guard
+GR-2
+Prevents members promoting beyond their level
+✅ Block + Log
+Email to tarik@
+Shadow Block Monitor
+GR-3
+Detects propagation failures, sync backlogs
+✅ Retry queue
+Alert if >10K backlog
+Calendar Sync Health
+GR-4
+Monitors token expiry, sync lag
+✅ Auto-reconnect token
+Alert if >24h lag
+Financial Anomaly Detection
+GR-5
+Flags booking amounts outside expected ranges
+✅ Hold for review
+Alert if discrepancy >5%
+Data Export Authorization
+GR-6
+Gates bulk data exports behind approval
+✅ Block unauthorized
+Alert on attempt
+Emergency Shutdown
+GR-7
+Circuit breaker for critical failures
+✅ Auto-shutdown
+Immediate email + SMS
+Guardian File Location
+The Active Guardian should be at: - File: server/activeGuardian.ts (or server/services/activeGuardian.ts) - Size: ~639 lines (if using the version from GEEVES_V20_ALIGNMENT_PROMPT.md) - Router: server/routers/guardian.ts (if separate router exists)
+Guardian Database Tables
+Run this migration to ensure Guardian tables exist:
+-- Guardian audit log — every guardrail decision is recorded hereCREATE TABLE IF NOT EXISTS guardian_audit_log (  id VARCHAR(36) PRIMARY KEY,  guardrailId VARCHAR(10) NOT NULL, -- 'GR-1', 'GR-2', etc.  severity ENUM('info', 'warning', 'critical', 'emergency') NOT NULL DEFAULT 'info',  action VARCHAR(50) NOT NULL, -- 'blocked', 'auto_fixed', 'escalated', 'allowed', 'shutdown'  actorId VARCHAR(36), -- user/member who triggered the guardrail  targetId VARCHAR(36), -- resource being acted upon  details JSON,  resolvedAt TIMESTAMP NULL,  resolvedBy VARCHAR(36) NULL,  createdAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP,  INDEX idx_guardrail (guardrailId, createdAt),  INDEX idx_severity (severity, createdAt),  INDEX idx_actor (actorId, createdAt));-- Guardian configuration — per-household settingsCREATE TABLE IF NOT EXISTS guardian_config (  householdId VARCHAR(36) PRIMARY KEY,  gr1Enabled BOOLEAN DEFAULT TRUE,  gr2Enabled BOOLEAN DEFAULT TRUE,  gr3Enabled BOOLEAN DEFAULT TRUE,  gr4Enabled BOOLEAN DEFAULT TRUE,  gr5Enabled BOOLEAN DEFAULT TRUE,  gr6Enabled BOOLEAN DEFAULT TRUE,  gr7Enabled BOOLEAN DEFAULT TRUE,  gr1AutoFix BOOLEAN DEFAULT TRUE,  gr2AutoFix BOOLEAN DEFAULT TRUE,  gr3AutoFix BOOLEAN DEFAULT TRUE,  gr4AutoFix BOOLEAN DEFAULT TRUE,  gr5AutoFix BOOLEAN DEFAULT FALSE, -- Financial: hold for review by default  gr6AutoFix BOOLEAN DEFAULT TRUE,  gr7AutoFix BOOLEAN DEFAULT FALSE, -- Emergency shutdown: human decision by default  alertEmail VARCHAR(255) DEFAULT 'tarik@tjperkinsfam.com',  emergencyPhone VARCHAR(50),  updatedAt TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP);-- Seed default config for existing householdsINSERT IGNORE INTO guardian_config (householdId)SELECT id FROM households;
+
+Section 2: Cron Job Configuration
+2.1 Existing Scheduled Endpoints (already in index.ts)
+These endpoints are already defined in your index.ts. They need to be called by cron jobs:
+Endpoint
+Handler
+Purpose
+Recommended Frequency
+POST /api/scheduled/knowledge-review
+knowledgeReviewHandler
+Knowledge base review
+Every 24 hours
+POST /api/scheduled/ical-poll
+icalPollHandler
+iCal feed polling
+Every 5 minutes
+POST /api/scheduled/email-scrape
+emailScrapeHandler
+Booking email scraping
+Every 15 minutes
+POST /api/scheduled/token-refresh
+tokenRefreshHandler
+OAuth token refresh
+Every 30 minutes
+POST /api/scheduled/integration-health
+integrationHealthCheckHandler
+Integration health check
+Every 10 minutes
+POST /api/scheduled/orphan-sweep
+orphanSweepHandler
+Cleanup orphan records
+Every 6 hours
+POST /api/scheduled/propagation-retry
+propagationRetryHandler
+Retry failed propagations
+Every 2 minutes
+POST /api/scheduled/shadow-block-sync-retry
+shadowBlockSyncRetryHandler
+Sync shadow blocks to Google
+Every 2 minutes
+POST /api/scheduled/exchange-rate-fetch
+exchangeRateFetchHandler
+Fetch historical exchange rates
+Daily at 00:00
+2.2 NEW: Guardian Cron Endpoints (to add)
+Add these new scheduled endpoints to index.ts:
+// === GUARDIAN CRON ENDPOINTS ===// These should be added to index.ts alongside existing scheduled endpointsimport { guardianMonitorHandler } from "./scheduledHandlers/guardianMonitor";import { guardianDailyDigestHandler } from "./scheduledHandlers/guardianDailyDigest";import { guardianFinancialSweepHandler } from "./scheduledHandlers/guardianFinancialSweep";// In the Express app setup section:app.post("/api/scheduled/guardian-monitor", guardianMonitorHandler);       // Every 5 minapp.post("/api/scheduled/guardian-digest", guardianDailyDigestHandler);      // Daily at 08:00app.post("/api/scheduled/guardian-financial", guardianFinancialSweepHandler); // Every 30 min
+2.3 Cron Job Configuration (for Manus cron gateway)
+Configure these cron jobs in the Manus sandbox dashboard:
+{  "cronJobs": [    {      "name": "shadow-block-sync-retry",      "schedule": "0 */2 * * * *",      "endpoint": "POST /api/scheduled/shadow-block-sync-retry",      "headers": { "x-cron-secret": "${SYSTEM_CRON_SECRET}" }    },    {      "name": "propagation-retry",      "schedule": "0 */2 * * * *",      "endpoint": "POST /api/scheduled/propagation-retry",      "headers": { "x-cron-secret": "${SYSTEM_CRON_SECRET}" }    },    {      "name": "ical-poll",      "schedule": "0 */5 * * * *",      "endpoint": "POST /api/scheduled/ical-poll",      "headers": { "x-cron-secret": "${SYSTEM_CRON_SECRET}" }    },    {      "name": "integration-health",      "schedule": "0 */10 * * * *",      "endpoint": "POST /api/scheduled/integration-health",      "headers": { "x-cron-secret": "${SYSTEM_CRON_SECRET}" }    },    {      "name": "token-refresh",      "schedule": "0 */30 * * * *",      "endpoint": "POST /api/scheduled/token-refresh",      "headers": { "x-cron-secret": "${SYSTEM_CRON_SECRET}" }    },    {      "name": "email-scrape",      "schedule": "0 */15 * * * *",      "endpoint": "POST /api/scheduled/email-scrape",      "headers": { "x-cron-secret": "${SYSTEM_CRON_SECRET}" }    },    {      "name": "orphan-sweep",      "schedule": "0 0 */6 * * *",      "endpoint": "POST /api/scheduled/orphan-sweep",      "headers": { "x-cron-secret": "${SYSTEM_CRON_SECRET}" }    },    {      "name": "exchange-rate-fetch",      "schedule": "0 0 0 * * *",      "endpoint": "POST /api/scheduled/exchange-rate-fetch",      "headers": { "x-cron-secret": "${SYSTEM_CRON_SECRET}" }    },    {      "name": "knowledge-review",      "schedule": "0 0 0 * * *",      "endpoint": "POST /api/scheduled/knowledge-review",      "headers": { "x-cron-secret": "${SYSTEM_CRON_SECRET}" }    },    {      "name": "guardian-monitor",      "schedule": "0 */5 * * * *",      "endpoint": "POST /api/scheduled/guardian-monitor",      "headers": { "x-cron-secret": "${SYSTEM_CRON_SECRET}" }    },    {      "name": "guardian-digest",      "schedule": "0 0 8 * * *",      "endpoint": "POST /api/scheduled/guardian-digest",      "headers": { "x-cron-secret": "${SYSTEM_CRON_SECRET}" }    },    {      "name": "guardian-financial",      "schedule": "0 */30 * * * *",      "endpoint": "POST /api/scheduled/guardian-financial",      "headers": { "x-cron-secret": "${SYSTEM_CRON_SECRET}" }    }  ]}
+2.4 Environment Variables
+Ensure these are set in the beta sandbox environment:
+# === CRON SECURITY ===SYSTEM_CRON_SECRET=<generate-a-32-char-random-string># === GUARDIAN FEATURE FLAGS ===GUARDIAN_ENABLED=trueGUARDIAN_AUTO_FIX=trueGUARDIAN_ALERT_EMAIL=tarik@tjperkinsfam.comGUARDIAN_EMERGENCY_PHONE=+1-XXX-XXX-XXXX  # Optional: for SMS alerts# === WEBHOOK SECURITY (from gap-fill B4) ===ENABLE_WEBHOOK_TOKEN_CHECK=false  # Set to true after verifying tokens stored correctly# === SHADOW BLOCKING ===SHADOW_BLOCKING_ENABLED=trueUSE_DISTRIBUTED_LOCK=false        # Set to true if Redis/cluster is available# === NOTIFICATIONS ===RESEND_API_KEY=<your-resend-key>  # For email alertsTWILIO_SID=<optional>             # For SMS emergency alertsTWILIO_AUTH_TOKEN=<optional>TWILIO_FROM_NUMBER=<optional>
+
+Section 3: Guardian Monitor Handler
+Create server/scheduledHandlers/guardianMonitor.ts:
+/** * Guardian Monitor — Runs every 5 minutes * Checks all 7 guardrails and records status. */import type { Request, Response } from "express";import { sdk } from "../_core/sdk";import { getDb } from "../db";import { sql } from "drizzle-orm";export async function guardianMonitorHandler(req: Request, res: Response) {  // Authenticate cron request  try {    const user = await sdk.authenticateRequest(req);    if (!user.isCron) {      const ip = req.ip ?? "";      const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");      if (!isInternal) return res.status(403).json({ error: "cron-only endpoint" });    }  } catch {    const ip = req.ip ?? "";    const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");    if (!isInternal) return res.status(401).json({ error: "Unauthorized" });  }  const db = await getDb();  if (!db) return res.status(500).json({ error: "Database unavailable" });  const results: Record<string, { status: string; issues: number; details?: any }> = {};  try {    // GR-3: Shadow block backlog check    const backlogResult = await db.execute(sql`      SELECT         COUNT(*) as total_pending,        SUM(CASE WHEN syncStatus = 'sync_failed' THEN 1 ELSE 0 END) as failed_count,        SUM(CASE WHEN createdAt < NOW() - INTERVAL 24 HOUR THEN 1 ELSE 0 END) as stale_count      FROM shadow_blocks       WHERE syncStatus IN ('pending_sync', 'sync_failed')    `);    const backlog = (Array.isArray(backlogResult) ? backlogResult[0] : backlogResult)?.[0];    results["GR-3"] = {      status: backlog?.stale_count > 0 ? "warning" : "healthy",      issues: Number(backlog?.stale_count || 0),      details: { totalPending: Number(backlog?.total_pending || 0), failedCount: Number(backlog?.failed_count || 0) },    };    // GR-4: Calendar sync health — check for expired tokens    const tokenResult = await db.execute(sql`      SELECT         COUNT(*) as total_tokens,        SUM(CASE WHEN status != 'active' THEN 1 ELSE 0 END) as expired_tokens,        MAX(lastSyncedAt) as last_sync      FROM oauth_tokens       WHERE provider = 'google'    `);    const tokenHealth = (Array.isArray(tokenResult) ? tokenResult[0] : tokenResult)?.[0];    const hoursSinceSync = tokenHealth?.last_sync       ? (Date.now() - new Date(tokenHealth.last_sync).getTime()) / 3600000       : 999;    results["GR-4"] = {      status: tokenHealth?.expired_tokens > 0 ? "warning" : hoursSinceSync > 24 ? "critical" : "healthy",      issues: Number(tokenHealth?.expired_tokens || 0),      details: { hoursSinceSync: Math.round(hoursSinceSync), totalTokens: Number(tokenHealth?.total_tokens || 0) },    };    // GR-5: Financial anomaly — check for bookings with unusual amounts    const anomalyResult = await db.execute(sql`      SELECT COUNT(*) as anomaly_count      FROM bookings b      LEFT JOIN platform_fee_configurations pfc         ON b.householdId = pfc.householdId AND b.platform = pfc.platform      WHERE b.hostPayout IS NOT NULL         AND b.totalAmount IS NOT NULL        AND b.hostPayout > b.totalAmount * 0.95  -- Payout > 95% of total is suspicious        AND b.createdAt > NOW() - INTERVAL 7 DAY    `);    const anomaly = (Array.isArray(anomalyResult) ? anomalyResult[0] : anomalyResult)?.[0];    results["GR-5"] = {      status: anomaly?.anomaly_count > 0 ? "warning" : "healthy",      issues: Number(anomaly?.anomaly_count || 0),    };    // Record the health check    await db.execute(sql`      INSERT INTO guardian_audit_log (id, guardrailId, severity, action, details, createdAt)      VALUES (        UUID(),        'SYSTEM',        ${results["GR-4"].status === "critical" || results["GR-3"].issues > 100 ? "critical" : "info"},        'monitor_check',        ${JSON.stringify(results)},        NOW()      )    `);    // If critical issues found, trigger escalation    const hasCritical = Object.values(results).some(r => r.status === "critical");    if (hasCritical) {      await escalateCriticalAlert(results, db);    }    return res.json({ status: hasCritical ? "critical" : "healthy", guardrails: results, checkedAt: new Date().toISOString() });  } catch (err) {    console.error("[GuardianMonitor] Error:", err);    return res.status(500).json({ error: (err as Error)?.message });  }}async function escalateCriticalAlert(results: any, db: any) {  // Send email alert via Resend  const resendKey = process.env.RESEND_API_KEY;  if (!resendKey) return;  try {    await fetch("https://api.resend.com/emails", {      method: "POST",      headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },      body: JSON.stringify({        from: "Geeves.Life Guardian <alerts@geeves.life>",        to: [process.env.GUARDIAN_ALERT_EMAIL || "tarik@tjperkinsfam.com"],        subject: "🚨 Geeves Guardian: Critical Issues Detected",        html: `<h2>Guardian Critical Alert</h2><pre>${JSON.stringify(results, null, 2)}</pre><p>Dashboard: <a href="https://beta.geeves.life/super-admin?tab=guardian">View Details</a></p>`,      }),    });  } catch (e) {    console.error("[GuardianMonitor] Failed to send alert email:", e);  }}
+
+Section 4: Guardian Daily Digest Handler
+Create server/scheduledHandlers/guardianDailyDigest.ts:
+/** * Guardian Daily Digest — Runs every day at 08:00 * Sends a summary email of all guardrail activity in the last 24 hours. */import type { Request, Response } from "express";import { sdk } from "../_core/sdk";import { getDb } from "../db";import { sql } from "drizzle-orm";export async function guardianDailyDigestHandler(req: Request, res: Response) {  try {    const user = await sdk.authenticateRequest(req);    if (!user.isCron) {      const ip = req.ip ?? "";      const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");      if (!isInternal) return res.status(403).json({ error: "cron-only endpoint" });    }  } catch {    const ip = req.ip ?? "";    const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");    if (!isInternal) return res.status(401).json({ error: "Unauthorized" });  }  const db = await getDb();  if (!db) return res.status(500).json({ error: "Database unavailable" });  try {    // Get 24h summary    const summaryResult = await db.execute(sql`      SELECT         guardrailId,        action,        severity,        COUNT(*) as count      FROM guardian_audit_log      WHERE createdAt > NOW() - INTERVAL 24 HOUR      GROUP BY guardrailId, action, severity      ORDER BY FIELD(severity, 'emergency', 'critical', 'warning', 'info'), count DESC    `);    const summary = Array.isArray(summaryResult) ? summaryResult[0] : summaryResult;    // Get unresolved critical issues    const criticalResult = await db.execute(sql`      SELECT id, guardrailId, details, createdAt      FROM guardian_audit_log      WHERE severity IN ('critical', 'emergency')        AND resolvedAt IS NULL        AND createdAt > NOW() - INTERVAL 7 DAY      ORDER BY createdAt DESC      LIMIT 20    `);    const critical = Array.isArray(criticalResult) ? criticalResult[0] : criticalResult;    // Send digest email    const resendKey = process.env.RESEND_API_KEY;    if (resendKey) {      await fetch("https://api.resend.com/emails", {        method: "POST",        headers: { Authorization: `Bearer ${resendKey}`, "Content-Type": "application/json" },        body: JSON.stringify({          from: "Geeves.Life Guardian <reports@geeves.life>",          to: [process.env.GUARDIAN_ALERT_EMAIL || "tarik@tjperkinsfam.com"],          subject: `Geeves Guardian Daily Digest — ${new Date().toLocaleDateString()}`,          html: `<h2>Geeves Guardian — Daily Digest</h2>            <h3>Last 24 Hours Summary</h3>            <pre>${JSON.stringify(summary, null, 2)}</pre>            <h3>Unresolved Critical Issues (${(critical as any[])?.length || 0})</h3>            <pre>${JSON.stringify(critical, null, 2)}</pre>            <p><a href="https://beta.geeves.life/super-admin?tab=guardian">View Guardian Dashboard</a></p>`,        }),      });    }    return res.json({ summary, criticalCount: (critical as any[])?.length || 0, sentAt: new Date().toISOString() });  } catch (err) {    console.error("[GuardianDigest] Error:", err);    return res.status(500).json({ error: (err as Error)?.message });  }}
+
+Section 5: Guardian Financial Sweep Handler
+Create server/scheduledHandlers/guardianFinancialSweep.ts:
+/** * Guardian Financial Sweep — Runs every 30 minutes * Auto-reconciles recent bookings and flags anomalies. */import type { Request, Response } from "express";import { sdk } from "../_core/sdk";import { getDb } from "../db";import { sql } from "drizzle-orm";export async function guardianFinancialSweepHandler(req: Request, res: Response) {  try {    const user = await sdk.authenticateRequest(req);    if (!user.isCron) {      const ip = req.ip ?? "";      const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");      if (!isInternal) return res.status(403).json({ error: "cron-only endpoint" });    }  } catch {    const ip = req.ip ?? "";    const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");    if (!isInternal) return res.status(401).json({ error: "Unauthorized" });  }  const db = await getDb();  if (!db) return res.status(500).json({ error: "Database unavailable" });  try {    // Find bookings in the last 48 hours that haven't been reconciled    const unreconciledResult = await db.execute(sql`      SELECT b.id, b.householdId, b.platform, b.totalAmount, b.hostPayout, b.checkIn      FROM bookings b      LEFT JOIN guardian_audit_log gal         ON gal.targetId = b.id AND gal.guardrailId = 'GR-5' AND gal.createdAt > b.updatedAt      WHERE b.hostPayout IS NOT NULL         AND b.totalAmount IS NOT NULL        AND b.createdAt > NOW() - INTERVAL 48 HOUR        AND gal.id IS NULL      LIMIT 100    `);    const bookings = Array.isArray(unreconciledResult) ? unreconciledResult[0] : unreconciledResult;    let flagged = 0;    let cleared = 0;    for (const booking of (bookings as any[]) || []) {      // Get platform fee config      const configResult = await db.execute(sql`        SELECT commissionPct, processingFeePct, processingFeeFixed, reconciliationTolerancePct        FROM platform_fee_configurations        WHERE householdId = ${booking.householdId} AND platform = ${booking.platform} AND isActive = TRUE        LIMIT 1      `);      const config = (Array.isArray(configResult) ? configResult[0] : configResult)?.[0];      const gross = Number(booking.totalAmount);      const expectedFee = config        ? gross * (Number(config.commissionPct) / 100) + gross * (Number(config.processingFeePct) / 100) + Number(config.processingFeeFixed)        : gross * 0.155; // Default Airbnb      const expectedNet = gross - expectedFee;      const actualNet = Number(booking.hostPayout);      const discrepancyPct = actualNet > 0 ? Math.abs((expectedNet - actualNet) / actualNet) * 100 : 0;      const tolerance = Number(config?.reconciliationTolerancePct || 2);      if (discrepancyPct > tolerance * 2) {        // Flag for review        await db.execute(sql`          INSERT INTO guardian_audit_log (id, guardrailId, severity, action, targetId, details, createdAt)          VALUES (UUID(), 'GR-5', 'warning', 'flagged', ${booking.id},             ${JSON.stringify({ expectedNet, actualNet, discrepancyPct, platform: booking.platform })}, NOW())        `);        flagged++;      } else {        cleared++;      }    }    return res.json({ processed: (bookings as any[])?.length || 0, flagged, cleared, checkedAt: new Date().toISOString() });  } catch (err) {    console.error("[GuardianFinancial] Error:", err);    return res.status(500).json({ error: (err as Error)?.message });  }}
+
+Section 6: Activation Checklist
+Step 1: Database Migrations
+# Run the Guardian tables migration (Section 1)mysql -h <cloud-sql-host> -u <user> -p geeves_beta < guardian-tables.sql
+Step 2: Create Handler Files
+Create these 3 new files: - server/scheduledHandlers/guardianMonitor.ts (Section 3) - server/scheduledHandlers/guardianDailyDigest.ts (Section 4) - server/scheduledHandlers/guardianFinancialSweep.ts (Section 5)
+Step 3: Wire Endpoints
+Add the 3 new app.post() lines to index.ts (Section 2.2).
+Step 4: Configure Cron Jobs
+Add the 3 new Guardian cron jobs to the Manus dashboard (Section 2.3).
+Step 5: Set Environment Variables
+Add all variables from Section 2.4 to the beta sandbox environment.
+Step 6: Verify ActiveGuardian.ts
+Ensure server/activeGuardian.ts exists and exports the guardrail functions. If it’s missing, reference the GEEVES_V20_ALIGNMENT_PROMPT.md document which contains the full 639-line implementation.
+Step 7: Health Check
+# Test the monitor endpointcurl -X POST https://beta.geeves.life/api/scheduled/guardian-monitor \  -H "x-cron-secret: $SYSTEM_CRON_SECRET"# Expected response:# { "status": "healthy", "guardrails": { "GR-3": {...}, "GR-4": {...}, "GR-5": {...} }, "checkedAt": "..." }
+Step 8: Verify Daily Digest
+# Test the digest endpoint (will send an email)curl -X POST https://beta.geeves.life/api/scheduled/guardian-digest \  -H "x-cron-secret: $SYSTEM_CRON_SECRET"
+
+Section 7: Quick Reference
+What
+Where
+Status Check
+Guardian audit log
+guardian_audit_log table
+SELECT COUNT(*) FROM guardian_audit_log WHERE createdAt > NOW() - INTERVAL 24 HOUR;
+Guardian config
+guardian_config table
+SELECT * FROM guardian_config WHERE householdId = '<your-hh-id>';
+Cron job health
+Manus dashboard
+All 12 jobs showing green/last-run
+Monitor endpoint
+POST /api/scheduled/guardian-monitor
+Returns {status: "healthy"}
+Digest email
+tarik@tjperkinsfam.com inbox
+Daily at 08:00
+Financial sweep
+POST /api/scheduled/guardian-financial
+Returns {flagged: N, cleared: M}
+Feature flags
+Environment variables
+GUARDIAN_ENABLED=true
+
+Section 8: Emergency Procedures
+If Guardian triggers emergency shutdown (GR-7):
+Check guardian_audit_log for the trigger reason
+Review the Super Admin dashboard at /super-admin?tab=guardian
+Resolve the underlying issue
+Run: UPDATE guardian_config SET gr7AutoFix = FALSE WHERE householdId = '<id>';
+If manual override needed: UPDATE guardian_audit_log SET resolvedAt = NOW(), resolvedBy = '<your-user-id>' WHERE id = '<alert-id>';
+If cron jobs stop running:
+Check Manus dashboard for cron job status
+Verify SYSTEM_CRON_SECRET matches in both env and dashboard
+Check server logs: grep "cron-only endpoint" /var/log/geeves.log
+Test endpoint manually with curl (see Section 7)
+If alert emails not received:
+Verify RESEND_API_KEY is set and valid
+Check GUARDIAN_ALERT_EMAIL is set correctly
+Check Resend dashboard for delivery status
+Check spam/junk folders

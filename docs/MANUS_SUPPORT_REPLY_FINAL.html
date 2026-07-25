@@ -1,0 +1,624 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Manus Support — Context Retention Issue | Tarik Perkins</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      font-size: 15px;
+      line-height: 1.7;
+      color: #1a1a2e;
+      background: #f5f6fa;
+      padding: 2rem 1rem;
+    }
+
+    .wrapper {
+      max-width: 860px;
+      margin: 0 auto;
+      background: #ffffff;
+      border-radius: 12px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.08);
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    .header {
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      color: #fff;
+      padding: 2.5rem 2.5rem 2rem;
+    }
+    .header .badge {
+      display: inline-block;
+      background: rgba(255,255,255,0.15);
+      border: 1px solid rgba(255,255,255,0.25);
+      border-radius: 20px;
+      font-size: 11px;
+      font-weight: 600;
+      letter-spacing: 0.08em;
+      text-transform: uppercase;
+      padding: 3px 12px;
+      margin-bottom: 1rem;
+      color: #c8d6ff;
+    }
+    .header h1 {
+      font-size: 1.6rem;
+      font-weight: 700;
+      line-height: 1.3;
+      margin-bottom: 0.5rem;
+    }
+    .header .meta {
+      font-size: 13px;
+      color: rgba(255,255,255,0.6);
+    }
+    .header .meta span { margin-right: 1.5rem; }
+
+    /* ── Body ── */
+    .body { padding: 2.5rem; }
+
+    p { margin-bottom: 1rem; color: #2d2d44; }
+
+    h2 {
+      font-size: 1.15rem;
+      font-weight: 700;
+      color: #0f0c29;
+      margin: 2.5rem 0 0.75rem;
+      padding-bottom: 0.4rem;
+      border-bottom: 2px solid #e8eaf6;
+    }
+    h3 {
+      font-size: 1rem;
+      font-weight: 700;
+      color: #302b63;
+      margin: 2rem 0 0.6rem;
+    }
+    h4 {
+      font-size: 0.92rem;
+      font-weight: 600;
+      color: #555;
+      margin: 1.5rem 0 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── Callout boxes ── */
+    .callout {
+      border-left: 4px solid #5c6bc0;
+      background: #f0f2ff;
+      border-radius: 0 8px 8px 0;
+      padding: 1rem 1.25rem;
+      margin: 1.25rem 0;
+      color: #2d2d44;
+    }
+    .callout.warn {
+      border-color: #f57c00;
+      background: #fff8f0;
+    }
+    .callout.success {
+      border-color: #2e7d32;
+      background: #f0faf0;
+    }
+    .callout strong { color: #0f0c29; }
+
+    /* ── Tables ── */
+    .table-wrap { overflow-x: auto; margin: 1.25rem 0; border-radius: 8px; border: 1px solid #e0e3f0; }
+    table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+    thead tr { background: #302b63; color: #fff; }
+    thead th { padding: 10px 14px; text-align: left; font-weight: 600; letter-spacing: 0.03em; }
+    tbody tr:nth-child(even) { background: #f7f8fd; }
+    tbody tr:hover { background: #eef0fb; }
+    tbody td { padding: 9px 14px; border-bottom: 1px solid #e8eaf6; vertical-align: top; }
+    tbody tr:last-child td { border-bottom: none; }
+    .highlight-row td { font-weight: 700; background: #e8eaf6 !important; }
+    code {
+      font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace;
+      font-size: 12px;
+      background: #eef0fb;
+      border: 1px solid #d0d4f0;
+      border-radius: 4px;
+      padding: 1px 5px;
+      color: #302b63;
+    }
+
+    /* ── Numbered asks ── */
+    .asks { list-style: none; counter-reset: asks; margin: 1rem 0; }
+    .asks li {
+      counter-increment: asks;
+      display: flex;
+      gap: 1rem;
+      margin-bottom: 1rem;
+      align-items: flex-start;
+    }
+    .asks li::before {
+      content: counter(asks);
+      flex-shrink: 0;
+      width: 28px;
+      height: 28px;
+      background: #302b63;
+      color: #fff;
+      border-radius: 50%;
+      font-size: 13px;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin-top: 2px;
+    }
+    .asks li p { margin: 0; }
+    .asks li strong { color: #0f0c29; }
+
+    /* ── Stats grid ── */
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+      gap: 1rem;
+      margin: 1.25rem 0;
+    }
+    .stat-card {
+      background: #f0f2ff;
+      border: 1px solid #d0d4f0;
+      border-radius: 10px;
+      padding: 1rem 1.25rem;
+      text-align: center;
+    }
+    .stat-card .value {
+      font-size: 1.5rem;
+      font-weight: 800;
+      color: #302b63;
+      line-height: 1.2;
+    }
+    .stat-card .label {
+      font-size: 11.5px;
+      color: #666;
+      margin-top: 4px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    /* ── Footer ── */
+    .footer {
+      background: #f7f8fd;
+      border-top: 1px solid #e0e3f0;
+      padding: 1.5rem 2.5rem;
+      font-size: 13px;
+      color: #666;
+    }
+    .footer strong { color: #302b63; }
+    .footer .sig { margin-top: 0.5rem; }
+
+    /* ── Attachments list ── */
+    .attachments { list-style: none; margin: 0.75rem 0; }
+    .attachments li {
+      display: flex;
+      align-items: center;
+      gap: 0.5rem;
+      padding: 6px 0;
+      font-size: 13.5px;
+      border-bottom: 1px solid #eee;
+    }
+    .attachments li:last-child { border-bottom: none; }
+    .attachments li::before { content: "📎"; font-size: 14px; }
+
+    @media (max-width: 600px) {
+      .body { padding: 1.5rem; }
+      .header { padding: 1.75rem 1.5rem 1.5rem; }
+      .footer { padding: 1.25rem 1.5rem; }
+      .stats-grid { grid-template-columns: 1fr 1fr; }
+    }
+  </style>
+</head>
+<body>
+<div class="wrapper">
+
+  <!-- ══ HEADER ══ -->
+  <div class="header">
+    <div class="badge">Support Escalation — Context Retention</div>
+    <h1>Platform-Level Context Retention Failure<br>Across Long-Running Projects</h1>
+    <div class="meta">
+      <span>📅 June 19, 2026</span>
+      <span>📋 Pro Plan</span>
+      <span>💳 3,098,893 credits used</span>
+      <span>To: Riley @ Manus Support</span>
+    </div>
+  </div>
+
+  <!-- ══ BODY ══ -->
+  <div class="body">
+
+    <p>Hi Riley,</p>
+
+    <p>Thank you for the thoughtful response and for escalating this to your internal team. Before I answer your questions, I want to be direct about something: I am not writing this as a frustrated customer. I am writing it as someone who <strong>genuinely loves this product</strong>, has been one of its most active advocates, and has invested significant time and money building three substantial production projects on it. I have introduced Manus to colleagues and clients and recommended it publicly.</p>
+
+    <p>What follows is not a complaint — it is a detailed, evidence-backed account of a platform-level issue that I believe, if addressed, would make Manus significantly more valuable for the power users driving your most complex and commercially meaningful use cases. I would genuinely welcome the opportunity to work with your product and engineering teams as a <strong>design partner</strong> on this.</p>
+
+    <!-- ── Q1: Plan ── -->
+    <h2>Your Questions — Answered</h2>
+
+    <p><strong>1. Plan:</strong> Pro Plan.</p>
+
+    <p><strong>2 &amp; 3. Affected projects, dates, and credit usage:</strong></p>
+
+    <div class="callout warn">
+      <strong>Note on session share links:</strong> I would like to formally request a <strong>secure, access-controlled method</strong> for sharing session links with your support team. Several of my projects contain commercially sensitive IP and proprietary business logic. The current public share link mechanism is not appropriate for this type of disclosure. I am very willing to share the sessions — I simply need a mechanism that does not expose my clients' data publicly. A time-limited, support-team-only access token or a direct secure upload channel would resolve this.
+    </div>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>Project</th>
+            <th>Project ID</th>
+            <th>Duration</th>
+            <th>Net Credits Used</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><strong>MBOMS</strong><br><small>Maxfield Bakery Order Management System</small></td>
+            <td><em>(MBOMS project)</em></td>
+            <td>Jan 14 – Jun 19, 2026<br><small>~5 months</small></td>
+            <td><strong>2,527,386</strong></td>
+          </tr>
+          <tr>
+            <td><strong>StartOut</strong><br><small>Conference scheduling platform</small></td>
+            <td><code>N8kSRpESEW6PDnG7PDKBaF</code></td>
+            <td>May 19 – Jun 19, 2026<br><small>~31 days</small></td>
+            <td><strong>253,052</strong></td>
+          </tr>
+          <tr>
+            <td><strong>Geeves.life</strong><br><small>Personal life management platform</small></td>
+            <td><code>nKRUueEwEcFgrDnsh3N8Ek</code></td>
+            <td>Feb 2026 – present</td>
+            <td><strong>138,955</strong></td>
+          </tr>
+          <tr class="highlight-row">
+            <td colspan="3"><strong>Total across all projects</strong></td>
+            <td><strong>3,098,893</strong></td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <p>To put this in perspective: I have consumed over <strong>3 million credits</strong> on this platform, the overwhelming majority of which went into three complex, production-grade projects. MBOMS alone accounts for 2.5 million credits across 5 months of active development. These are not casual experiments — they are real business systems that I and my clients depend on.</p>
+
+    <!-- ══ EVIDENCE ══ -->
+    <h2>The Evidence — By Project</h2>
+
+    <!-- MBOMS -->
+    <h3>MBOMS — 5 Months · 763 Commits · ~190,000 Lines of Code · 2,527,386 Credits</h3>
+
+    <p>This is my largest project on the platform and the one most severely affected. The evidence of context loss is measurable, documented, and verifiable from the project filesystem and git history.</p>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="value">763</div>
+        <div class="label">Total Commits</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">52%</div>
+        <div class="label">Fix-Related Commits</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">106</div>
+        <div class="label">DB Migrations</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">69,716</div>
+        <div class="label">Words in todo.md</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">~79,000+</div>
+        <div class="label">Words of Compensatory Docs</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">40+</div>
+        <div class="label">Context Persistence Files</div>
+      </div>
+    </div>
+
+    <h4>Documentation written to compensate for context loss</h4>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Location</th><th>Words</th><th>Purpose</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>todo.md</code> (inside project)</td>
+            <td>69,716 words / 7,290 lines</td>
+            <td>Exhaustive task tracking — functions as session-to-session memory because the agent cannot hold project state</td>
+          </tr>
+          <tr>
+            <td><code>migration-map.md</code></td>
+            <td>434</td>
+            <td>Schema decision reference — because the agent cannot remember which migrations do what</td>
+          </tr>
+          <tr>
+            <td>~30 state dump files (outside project)</td>
+            <td>~3,500+</td>
+            <td>Created mid-task to persist working memory when context windows fill</td>
+          </tr>
+          <tr>
+            <td>7 MBOMS-specific skills</td>
+            <td>~4,912</td>
+            <td>Entire recurring workflows documented so the agent can re-learn them each session</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div class="callout">
+      A <code>todo.md</code> that is <strong>69,716 words — roughly the length of a novel</strong> — is not normal project management. It exists because the agent cannot hold project state across sessions and requires a written record to function. This file is itself the most compelling evidence of the problem.
+    </div>
+
+    <h4>Features built more than once — direct git evidence</h4>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>Commit</th><th>What Happened</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>ab3a8a6</code></td>
+            <td>"Fixed double-counting bug" in cash payments — payment validation was called after receipt creation, counting the same payment twice. Classic "forgot the earlier step exists" error.</td>
+          </tr>
+          <tr>
+            <td><code>828c4be</code></td>
+            <td>"Fixed double taxation issue for 9 orders" — 15% GCT applied on top of already-inclusive prices. Tax logic re-implemented without awareness it was already inclusive.</td>
+          </tr>
+          <tr>
+            <td><code>ee113be</code></td>
+            <td>"Reverted <code>recalculatePickListTotals</code>" — source of truth changed and then reverted.</td>
+          </tr>
+          <tr>
+            <td><code>5678adb</code></td>
+            <td>"Reverted 3 incorrectly assigned orders from draft pick lists" — load algorithm rebuilt incorrectly.</td>
+          </tr>
+          <tr>
+            <td><code>e6d005d</code></td>
+            <td>"Reverted 24 bulk-moved orders" — bulk operation done without awareness of existing constraints.</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h4>Structural indicators of context loss</h4>
+    <ul style="margin: 0.5rem 0 1rem 1.25rem; color: #2d2d44;">
+      <li style="margin-bottom:0.5rem"><strong>399 out of 763 commits (52%) contain "fix"</strong> — an unusually high fix-to-feature ratio for a project of this scope and maturity.</li>
+      <li style="margin-bottom:0.5rem"><strong>6 commits contain "revert"</strong> — explicit rollbacks of decisions that were forgotten between sessions.</li>
+      <li style="margin-bottom:0.5rem"><strong>4 sequential <code>import_dialog_state</code> files created within 4 minutes on March 31</strong> — the agent was clearly losing context mid-task and writing state to disk repeatedly to compensate.</li>
+      <li><strong>106 database migrations over 5 months</strong> — approximately 1 migration every 1.4 days, strongly suggesting schema decisions were being forgotten and re-made.</li>
+    </ul>
+
+    <!-- StartOut -->
+    <h3>StartOut — Sandbox Crash · Cascading Failures · 100% Session Waste · 253,052 Credits</h3>
+
+    <p>This project experienced the most severe failure mode: an <strong>unrecoverable sandbox crash</strong> that wasted an entire session and triggered a cascade of downstream failures.</p>
+
+    <div class="callout warn">
+      <strong>Sequence of events:</strong>
+      <ol style="margin: 0.5rem 0 0 1.25rem; color: #2d2d44;">
+        <li style="margin-bottom:0.4rem">A session hit token limits and had to be terminated. A <strong>2,500+ word handover block</strong> was manually assembled just so the next session could understand what had been built.</li>
+        <li style="margin-bottom:0.4rem">The next session inherited a sandbox already at <strong>load 100</strong> (broken from the previous session's context pressure).</li>
+        <li style="margin-bottom:0.4rem">Every recovery attempt — <code>git checkout</code>, <code>webdev_rollback</code>, <code>killall</code> — timed out or failed.</li>
+        <li style="margin-bottom:0.4rem">Load escalated from <strong>100 → 147 → 342</strong> over the course of the session.</li>
+        <li style="margin-bottom:0.4rem"><strong>Zero productive work was accomplished.</strong> Every credit spent in that session went to failed recovery attempts.</li>
+        <li style="margin-bottom:0.4rem">A separate task was started to rebuild the site, which published to the wrong URL — requiring yet another task to fix.</li>
+        <li>Seven pending edits already in progress had to be re-applied from scratch across two additional sessions.</li>
+      </ol>
+    </div>
+
+    <p>The handover documentation alone — <code>&lt;current_progress&gt;</code>, <code>&lt;current_state&gt;</code>, <code>&lt;technical_context&gt;</code>, <code>&lt;key_files&gt;</code>, <code>&lt;next_steps&gt;</code>, <code>&lt;user_requirements&gt;</code> — totalled over 2,500 words written specifically so the next session could pick up where the last left off. This is not project documentation. <strong>It is AI memory compensation.</strong></p>
+
+    <!-- Geeves -->
+    <h3>Geeves.life — A Knowledge Management System Built Inside the App · 138,955 Credits</h3>
+
+    <p>On this project, having learned from MBOMS and StartOut, I took a proactive approach and built an entire knowledge management subsystem <em>inside the application itself</em> — not because the application requires it, but because the platform's own knowledge management cannot be relied upon. This is the most telling evidence of all: I spent a meaningful portion of my Geeves.life budget building infrastructure to compensate for a platform failure.</p>
+
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>System Built</th><th>Description</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>project_knowledge</code> DB table</td>
+            <td>85 entries across 18 categories — persistent store that survives context resets</td>
+          </tr>
+          <tr>
+            <td><code>docs/AI_MEMORY.md</code> (2,581 words)</td>
+            <td>Auto-regenerated every 24 hours — designed to be re-read at the start of every session</td>
+          </tr>
+          <tr>
+            <td><code>docs/PHASE_1.md</code> (4,919 words)</td>
+            <td>Architectural decisions documented because the agent forgets them between sessions</td>
+          </tr>
+          <tr>
+            <td><code>docs/GLOBAL_DESIGN.md</code> (6,399 words)</td>
+            <td>Full design system documented because the agent reverts to generic styling after context loss</td>
+          </tr>
+          <tr>
+            <td><code>docs/BRANDING.md</code> + 5 other reference docs</td>
+            <td>Brand, security, performance, connectivity, and hardware philosophy — all written to compensate for forgetting</td>
+          </tr>
+          <tr>
+            <td><code>project_tasks</code> DB table (193 tasks)</td>
+            <td>Seeded from <code>todo.md</code> — because the agent cannot reliably track what has been built vs. what is pending</td>
+          </tr>
+          <tr>
+            <td>Knowledge review heartbeat (24h cron)</td>
+            <td>Automated sync of <code>todo.md</code> → DB + regeneration of <code>AI_MEMORY.md</code> on every run</td>
+          </tr>
+          <tr>
+            <td>Super Admin portal (<code>/super-admin</code>)</td>
+            <td>A full admin interface built into the application to inspect and manage project state independently of the agent</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+
+    <!-- Aggregate -->
+    <h2>The Aggregate Picture</h2>
+
+    <div class="stats-grid">
+      <div class="stat-card">
+        <div class="value">~94,000</div>
+        <div class="label">Words of Compensatory Documentation</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">3,098,893</div>
+        <div class="label">Total Credits Spent</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">3</div>
+        <div class="label">Production Projects Affected</div>
+      </div>
+      <div class="stat-card">
+        <div class="value">5 mo.</div>
+        <div class="label">Duration of Issue</div>
+      </div>
+    </div>
+
+    <p>Across all three projects, I have written approximately <strong>~94,000 words of documentation</strong> whose primary purpose is to compensate for context loss — not to serve the applications themselves. To put that in perspective: the average non-fiction book is 70,000–80,000 words. I have written <strong>more than a book's worth of AI memory scaffolding</strong> just to keep a development agent functional across sessions.</p>
+
+
+    <!-- Root Cause Timeline -->
+    <h2>When It Started — and Why</h2>
+
+    <p>I want to be precise about the trigger point, because I believe it points directly to a specific platform behaviour rather than a general instability. The context loss and design drift did not begin at project inception. They began at a clearly identifiable moment: <strong>when my knowledge base reached maximum capacity</strong>.</p>
+
+    <p>Once the 100-entry limit was hit on the Pro plan, the agent began exhibiting the symptoms described throughout this report — forgetting architectural decisions, reverting to generic design patterns, re-implementing logic that already existed. The knowledge base was full, and new context was simply not being retained.</p>
+
+    <div class="callout warn">
+      <strong>The disabling process made things worse, not better.</strong> My expectation was that disabling individual knowledge entries would free up capacity and restore retention. Instead, I found:
+      <ul style="margin: 0.5rem 0 0 1.25rem; color: #2d2d44;">
+        <li style="margin-bottom:0.4rem">Disabling entries was a <strong>tedious, one-at-a-time process</strong> with no bulk management tools.</li>
+        <li style="margin-bottom:0.4rem">There was no clear indication of how much capacity each entry consumed, making it impossible to prioritise which to disable.</li>
+        <li>Most critically: <strong>disabling entries did not result in increased retention capacity.</strong> The agent continued to lose context even after I had disabled a significant number of entries. The limit appeared to be a hard ceiling on the number of items, not a soft limit on actual token or memory consumption — which means the metric being used to enforce the cap is the wrong one.</li>
+      </ul>
+    </div>
+
+    <p>This is the core of the issue. The knowledge management system, as currently designed, creates a situation where a power user building a complex long-running project will inevitably hit the cap — and once they do, the available remediation tools are insufficient to restore normal function.</p>
+
+    <!-- Product Recommendations -->
+    <h2>Product Improvement Recommendations</h2>
+
+    <p>What follows is offered in good faith as constructive product feedback from a power user who has spent significant time working around the current system's limitations. I am not asking for all of these to be implemented immediately. I am sharing them because they represent a coherent, user-centred overhaul of a feature that is currently limiting the platform's value for complex, long-running projects — and because I believe Manus is capable of building something genuinely excellent here.</p>
+
+    <div class="callout success">
+      <strong>These recommendations come from direct experience.</strong> Every item below maps to a specific friction point I encountered across MBOMS, StartOut, and Geeves.life. I have already built workarounds for several of them inside my own projects — which means the solutions are proven, not theoretical.
+    </div>
+
+    <h3>Recommendation 1 — Project-Scoped Knowledge Organisation</h3>
+    <p>Currently, all knowledge entries exist in a single flat pool across all projects. This means that when working on Geeves.life, the agent is also carrying context from MBOMS and StartOut — consuming capacity and introducing noise. Knowledge should be <strong>organised by project</strong>, with the ability to:</p>
+    <ul style="margin: 0.5rem 0 1rem 1.25rem; color: #2d2d44;">
+      <li style="margin-bottom:0.4rem">Enable or disable entire projects' knowledge sets with a single toggle — so when MBOMS is not in focus, its 40+ entries are not consuming capacity in a Geeves.life session.</li>
+      <li style="margin-bottom:0.4rem">See a per-project knowledge summary (entry count, capacity used, last updated) from a single management view.</li>
+      <li>Automatically activate the relevant project's knowledge when a task is opened within that project's context.</li>
+    </ul>
+
+    <h3>Recommendation 2 — Full CRUD Operability on Knowledge Entries</h3>
+    <p>The current suggestion-driven approach — where the agent proposes knowledge entries and the user can only accept or disable them — is a significant missed opportunity. Knowledge management should be a first-class feature with full create, read, update, and delete capabilities:</p>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th>Operation</th><th>Current State</th><th>Recommended State</th></tr></thead>
+        <tbody>
+          <tr>
+            <td><strong>Create</strong></td>
+            <td>Agent-suggested only; user cannot manually add entries</td>
+            <td>User can manually create entries at any time, with project, category, title, and content fields</td>
+          </tr>
+          <tr>
+            <td><strong>Read</strong></td>
+            <td>Entries visible in a flat list; no search or filter</td>
+            <td>Full search, filter by project / category / date, and content preview</td>
+          </tr>
+          <tr>
+            <td><strong>Update</strong></td>
+            <td>Not possible — entries are immutable once created</td>
+            <td>User can edit any entry's content, category, or title at any time</td>
+          </tr>
+          <tr>
+            <td><strong>Delete</strong></td>
+            <td>Disable only — entries remain in the system and continue to count against the cap</td>
+            <td>Full permanent deletion with a confirmation prompt; disabled entries must not count against capacity</td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
+    <p>The inability to update or refine existing entries is particularly limiting. When an architectural decision evolves — which happens constantly in active development — there is no way to update the corresponding knowledge entry. The agent either holds stale information or holds no information. Neither is acceptable for a production system.</p>
+
+    <h3>Recommendation 3 — Token-Based Capacity, Not Entry-Count-Based</h3>
+    <p>The current 100-entry limit for Pro is a blunt instrument. A one-line entry ("Use TypeScript strict mode") consumes the same slot as a 500-word architectural decision. This penalises users who write high-quality, detailed knowledge entries — which are precisely the entries that provide the most value.</p>
+    <p>The recommended approach is to enforce the limit based on <strong>actual token consumption</strong> (or a clear approximation such as character count), and to surface this information in the UI:</p>
+    <ul style="margin: 0.5rem 0 1rem 1.25rem; color: #2d2d44;">
+      <li style="margin-bottom:0.4rem">Show a capacity bar (e.g., "4,200 / 8,000 tokens used") rather than a raw entry count.</li>
+      <li style="margin-bottom:0.4rem">Show the token cost of each individual entry so users can make informed decisions about what to trim.</li>
+      <li>Warn the user when approaching capacity — before the limit is hit — so they can proactively manage their knowledge base rather than discovering the problem through context loss.</li>
+    </ul>
+
+    <h3>Recommendation 4 — Disable Must Actually Free Capacity</h3>
+    <p>Currently, disabling a knowledge entry does not free up capacity — the entry still exists and still counts against the limit. This is deeply counterintuitive and means the remediation action the UI implies is available does not actually work. Users who spend time disabling entries to free up space are not actually freeing up space.</p>
+    <p>The fix is straightforward: <strong>disabled entries must not count against the active capacity limit.</strong> If the platform needs to retain disabled entries for audit or recovery purposes, this should be clearly communicated in the UI, and a separate "archived" state should be introduced that is explicitly excluded from the active capacity calculation.</p>
+
+    <h3>Recommendation 5 — Proactive Warnings and Graceful Degradation</h3>
+    <p>When the knowledge base is full, the current behaviour is silent failure — the agent simply stops retaining new context without notifying the user. This is the most damaging aspect of the current design, because the user has no way of knowing that context loss is occurring until they observe its symptoms through design drift, forgotten decisions, or re-implemented features.</p>
+    <p>The recommended behaviour:</p>
+    <ul style="margin: 0.5rem 0 1rem 1.25rem; color: #2d2d44;">
+      <li style="margin-bottom:0.4rem">Notify the user explicitly when the knowledge base reaches 80% and 100% capacity.</li>
+      <li style="margin-bottom:0.4rem">When at capacity, surface a management prompt in the chat interface: "Your knowledge base is full. Would you like to review and free up space before continuing?"</li>
+      <li>Never silently drop context. If a new knowledge item cannot be stored, tell the user — do not pretend it was stored.</li>
+    </ul>
+
+    <!-- Asks -->
+    <h2>What I Am Asking For</h2>
+
+    <p>I want to be clear that I am not writing this to be adversarial. I am writing it because I believe Manus has the potential to be the best AI development platform available, and I want to help make it that. The issues I have described are solvable, and I would genuinely welcome the chance to work with your product and engineering teams as a design partner.</p>
+
+    <ol class="asks">
+      <li>
+        <p><strong>Acknowledgement</strong> that cross-session context retention failure for long-running projects is a known platform issue — not expected behaviour — and that the 100-entry knowledge base limit for Pro is insufficient for projects of this scope.</p>
+      </li>
+      <li>
+        <p><strong>Credit compensation</strong> commensurate with the sessions demonstrably wasted on context recovery, feature rebuilding, and workaround infrastructure — particularly the complete session loss on StartOut and the recurring rebuild cycles on MBOMS. I am happy to work with your team to quantify this from session logs.</p>
+      </li>
+      <li>
+        <p><strong>A secure session-sharing mechanism</strong> for support escalations. The current public share link is not appropriate for projects containing commercially sensitive IP. I want to cooperate fully with your investigation — I simply need a way to do so without exposing my clients' data. A time-limited, support-team-only access token or a direct secure upload channel would resolve this.</p>
+      </li>
+      <li>
+        <p><strong>A timeline or roadmap item</strong> for when cross-session context retention will work reliably for long-running projects on the Pro plan.</p>
+      </li>
+      <li>
+        <p><strong>A design partnership conversation.</strong> I have direct, documented experience of exactly where this breaks down at scale. I have already built workarounds that could inform a proper platform solution. I am motivated to help, and I believe a conversation between your product team and a power user who has stress-tested the system this thoroughly would be genuinely valuable for both sides.</p>
+      </li>
+    </ol>
+
+    <!-- Attachments -->
+    <h2>Attached Supporting Documents</h2>
+    <ul class="attachments">
+      <li><strong>MANUS_BUG_REPORT.md</strong> — Technical root cause analysis with five specific platform fix requests</li>
+      <li><strong>Context_Retention_Evidence_Report_—_MBOMS_Project.pdf</strong> — Quantified evidence from the MBOMS project (git analysis, migration counts, documentation overhead)</li>
+      <li><strong>StartOut evidence report</strong> — Sandbox crash sequence and cascading failure documentation</li>
+    </ul>
+
+    <p style="margin-top:1.5rem;">I look forward to your response, and I genuinely hope this level of documentation is useful to your team.</p>
+
+  </div><!-- /body -->
+
+  <!-- ══ FOOTER ══ -->
+  <div class="footer">
+    <div class="sig">
+      <strong>Tarik Perkins</strong> · Pro Plan · 3,098,893 credits used<br>
+      Projects: Geeves.life (<code>nKRUueEwEcFgrDnsh3N8Ek</code>) · MBOMS · StartOut (<code>N8kSRpESEW6PDnG7PDKBaF</code>)
+    </div>
+    <div style="margin-top:0.75rem; color:#999; font-size:12px;">
+      Prepared Jun 19, 2026 · In reply to Riley @ Manus Support (support@manus.im)
+    </div>
+  </div>
+
+</div><!-- /wrapper -->
+</body>
+</html>
