@@ -493,7 +493,7 @@ function computeSundayHolidayBlocks(
 /**
  * Fetches and parses an iCal URL, returning normalized booking entries.
  */
-async function fetchAndParseICal(icalUrl: string, platform?: string): Promise<Array<{
+async function fetchAndParseICal(icalUrl: string, platform?: string, propertyId?: string): Promise<Array<{
   icalUid: string;
   summary: string;
   description: string;
@@ -551,8 +551,16 @@ async function fetchAndParseICal(icalUrl: string, platform?: string): Promise<Ar
       bookingType = "booking";
     }
 
+    // BUG FIX #2 (2026-07-25): events without a stable UID (Booking.com often omits
+    // UID) previously got a randomUUID() per poll → duplicate inserts + ghost
+    // cancellations. Use a deterministic UID derived from property + date range so
+    // the same stay maps to the same icalUid across polls.
+    const stableUid = event.uid
+      ? String(event.uid)
+      : `${platform}-${propertyId ?? "unknown"}-${start.getTime()}-${end.getTime()}`;
+
     results.push({
-      icalUid: String(event.uid || randomUUID()),
+      icalUid: stableUid,
       summary,
       description,
       checkIn: start.getTime(),
@@ -624,7 +632,7 @@ export async function aggregatePlatformICal(platformId: string): Promise<Aggrega
 
   let parsedEvents: Awaited<ReturnType<typeof fetchAndParseICal>> = [];
   try {
-    parsedEvents = await fetchAndParseICal(platform.icalUrl, platform.platform);
+    parsedEvents = await fetchAndParseICal(platform.icalUrl, platform.platform, platform.propertyId);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     result.errors.push(`Failed to fetch/parse iCal: ${msg}`);
@@ -708,6 +716,18 @@ export async function aggregatePlatformICal(platformId: string): Promise<Aggrega
     .map((e) => e.icalUid)
     .filter((uid): uid is string => !!uid);
 
+  // BUG FIX #1 (2026-07-25): guard against cascade cancellation. If the feed
+  // returned zero identifiable events it is almost always a transient error
+  // (CDN cache, rate limit, server 5xx) — NOT that every booking was cancelled.
+  // The `liveUids.length > 0` check below already prevents the empty-NOT-IN
+  // match; this branch records it explicitly for observability.
+  if (liveUids.length === 0) {
+    result.errors.push(
+      "iCal feed returned zero identifiable events — skipping cancellation detection to prevent cascade cancel",
+    );
+    return result;
+  }
+
   if (liveUids.length > 0) {
     // Find confirmed bookings for this platform that have an icalUid NOT in the live feed
     const staleRows = await d
@@ -729,14 +749,31 @@ export async function aggregatePlatformICal(platformId: string): Promise<Aggrega
       const autoCancelIds: string[] = [];
       const pendingIds: string[] = [];
 
+      // BUG FIX #3 (2026-07-25): 30-minute grace period before auto-cancelling.
+      // Booking.com's CDN caches iCal feeds aggressively — a booking can vanish
+      // from one poll and reappear in the next. Only auto-cancel rows that have
+      // been missing for at least GRACE_PERIOD_MS (approximated via updatedAt,
+      // which is bumped whenever the row is seen/updated by a poll).
+      const GRACE_PERIOD_MS = 30 * 60 * 1000; // 30 minutes
+
       for (const row of staleRows) {
         const src = (row as any).dataSource as string | undefined;
         if (src === 'both') {
           // Email also confirmed this booking — require email cancellation signal too
           pendingIds.push(row.id);
         } else {
-          // iCal-only booking — iCal removal is sufficient
-          autoCancelIds.push(row.id);
+          const updatedAtMs =
+            row.updatedAt instanceof Date ? row.updatedAt.getTime() : Number(row.updatedAt) || 0;
+          const timeSinceLastUpdate = Date.now() - updatedAtMs;
+          if (timeSinceLastUpdate < GRACE_PERIOD_MS) {
+            // Within grace period — don't cancel yet, keep under observation
+            result.errors.push(
+              `Booking ${row.id} missing from feed but within ${GRACE_PERIOD_MS / 60000}min grace period — not cancelling yet`,
+            );
+          } else {
+            // Outside grace period — iCal-only booking, safe to auto-cancel
+            autoCancelIds.push(row.id);
+          }
         }
       }
 

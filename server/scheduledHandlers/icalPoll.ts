@@ -52,7 +52,7 @@ export async function icalPollHandler(req: Request, res: Response) {
     }
 
     const platforms = await db
-      .select({ id: propertyPlatforms.id, propertyId: propertyPlatforms.propertyId, displayName: propertyPlatforms.displayName })
+      .select({ id: propertyPlatforms.id, propertyId: propertyPlatforms.propertyId, displayName: propertyPlatforms.displayName, icalUrl: propertyPlatforms.icalUrl })
       .from(propertyPlatforms)
       .where(eq(propertyPlatforms.isActive, true));
 
@@ -68,6 +68,12 @@ export async function icalPollHandler(req: Request, res: Response) {
     const propertyIds = new Set<string>();
 
     for (const platform of platforms) {
+      // BUG FIX #1-defense (2026-07-25): skip platforms without an iCal URL
+      // (direct/manual booking platforms). Polling an empty URL could return an
+      // empty event set and trip cascade-cancellation of all direct bookings.
+      if (!platform.icalUrl || platform.icalUrl.trim() === "") {
+        continue;
+      }
       try {
         const result = await aggregatePlatformICal(platform.id);
         polled++;
