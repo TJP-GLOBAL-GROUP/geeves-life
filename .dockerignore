@@ -1,0 +1,13 @@
+node_modules
+dist
+.git
+.github
+docs
+ops
+*.md
+.env
+.env.*
+!.env.example
+chrome-extension
+references
+skills
