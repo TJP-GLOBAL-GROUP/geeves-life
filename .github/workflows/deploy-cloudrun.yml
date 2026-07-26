@@ -1,5 +1,5 @@
 # Deploy geeves.life beta to Google Cloud Run on every push to main.
-# Auth: Workload Identity Federation (keyless — no SA JSON keys in GitHub).
+# Auth: Service Account JSON key stored as GitHub secret GCP_SA_KEY
 # Secrets: all sensitive values live in GCP Secret Manager, injected at runtime.
 name: Deploy beta → Cloud Run
 
@@ -20,18 +20,16 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # required for Workload Identity Federation
 
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      # ── Authenticate to GCP via Workload Identity Federation ──────────────────
+      # ── Authenticate to GCP via SA JSON key ───────────────────────────────────
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v2
         with:
-          workload_identity_provider: ${{ secrets.GCP_WIF_PROVIDER }}
-          service_account: ${{ secrets.GCP_DEPLOY_SA }}
+          credentials_json: ${{ secrets.GCP_SA_KEY }}
 
       - name: Set up gcloud CLI
         uses: google-github-actions/setup-gcloud@v2
@@ -61,8 +59,8 @@ jobs:
             --min-instances 0 \
             --max-instances 5 \
             --timeout 300 \
-            --service-account "${{ env.SERVICE }}-runtime@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
-            --set-env-vars "NODE_ENV=production,APP_URL=https://beta.geeves.life,VITE_APP_URL=https://beta.geeves.life,VITE_APP_ID=geeves-beta,GCS_PROJECT_ID=${{ env.GCP_PROJECT_ID }},GCS_BUCKET_NAME=geeves-beta-assets,GCS_BUCKET_UPLOADS=geeves-beta-uploads,GCS_BUCKET_BACKUPS=geeves-beta-backups,GCS_BUCKET_EXPORTS=geeves-beta-exports,GUARDIAN_ENABLED=true,GUARDIAN_ALERT_EMAIL=tarik@geeves.life,SHADOW_BLOCK_ENGINE_ENABLED=false" \
+            --service-account "geeves-beta-runtime@${{ env.GCP_PROJECT_ID }}.iam.gserviceaccount.com" \
+            --set-env-vars "NODE_ENV=production,APP_URL=https://beta.geeves.life,VITE_APP_URL=https://beta.geeves.life,VITE_APP_ID=geeves-beta,GCS_PROJECT_ID=${{ env.GCP_PROJECT_ID }},GCS_BUCKET_NAME=geeves-beta-assets,GUARDIAN_ENABLED=true,GUARDIAN_ALERT_EMAIL=tarik@geeves.life,SHADOW_BLOCK_ENGINE_ENABLED=false" \
             --set-secrets "DATABASE_URL=geeves-beta-database-url:latest,EDIT_SECRET=geeves-edit-secret:latest,SYSTEM_CRON_SECRET=geeves-cron-secret:latest,JWT_SECRET=geeves-jwt-secret:latest,RESEND_API_KEY=geeves-resend-api-key:latest,GOOGLE_CLIENT_ID=geeves-google-client-id:latest,GOOGLE_CLIENT_SECRET=geeves-google-client-secret:latest,GOOGLE_APPLICATION_CREDENTIALS_JSON=geeves-gcs-credentials:latest"
 
       # ── Smoke test ────────────────────────────────────────────────────────────
