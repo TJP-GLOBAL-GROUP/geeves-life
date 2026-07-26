@@ -7,6 +7,7 @@ RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
 
 # Install dependencies first (cached layer)
 COPY package.json pnpm-lock.yaml ./
+COPY patches/ ./patches/
 RUN pnpm install --frozen-lockfile
 
 # Copy source and build
@@ -24,6 +25,7 @@ ENV PORT=8080
 
 # Install only production dependencies
 COPY package.json pnpm-lock.yaml ./
+COPY patches/ ./patches/
 RUN corepack enable && corepack prepare pnpm@10.4.1 --activate && \
     pnpm install --frozen-lockfile --prod
 
