@@ -86,11 +86,6 @@ export const bankAccounts = mysqlTable("bank_accounts", {
   category: mysqlEnum("category", ["personal", "business"]).default("personal").notNull(),
   currency: varchar("currency", { length: 3 }).default("USD").notNull(),
   lastFourDigits: varchar("lastFourDigits", { length: 4 }),
-  // Card lifecycle: every prior/replacement/virtual number for this physical account
-  // (e.g. reissued Amex, virtual card variants). Ingestion must resolve through
-  // resolveCanonicalAccountId() so replacements never spawn duplicate accounts.
-  cardNumberHistory: json("cardNumberHistory").$type<string[]>().default([]),
-  canonicalAccountId: int("canonicalAccountId"),
   currentBalance: decimal("currentBalance", { precision: 12, scale: 2 }).default("0"),
   verticalId: varchar("verticalId", { length: 36 }),
   isActive: boolean("isActive").default(true),
@@ -2388,11 +2383,7 @@ export const notificationSettings = mysqlTable("notification_settings", {
 export type NotificationSetting = typeof notificationSettings.$inferSelect;
 export type InsertNotificationSetting = typeof notificationSettings.$inferInsert;
 
-
-// ═══════════════════════════════════════════════════════════════════════
-// ICS REGENERATION QUEUE (Fix 1 — prevent stale outbound ICS)
-// ═══════════════════════════════════════════════════════════════════════
-
+// ─── ICS Regeneration Queue ───────────────────────────────────────────────────
 export const icsRegenerationQueue = mysqlTable("ics_regeneration_queue", {
   id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
   propertyId: varchar("propertyId", { length: 36 }).notNull(),
@@ -2403,4 +2394,106 @@ export const icsRegenerationQueue = mysqlTable("ics_regeneration_queue", {
   propertyIdx: index("ics_rq_property_idx").on(t.propertyId),
   processedIdx: index("ics_rq_processed_idx").on(t.processedAt),
 }));
-export type IcsRegenerationQueueItem = typeof icsRegenerationQueue.$inferSelect;
+export type IcsRegenerationQueue = typeof icsRegenerationQueue.$inferSelect;
+export type InsertIcsRegenerationQueue = typeof icsRegenerationQueue.$inferInsert;
+
+// ─── Edit Log (Reconciliation Explorer write-back audit trail) ────────────────
+export const editLog = mysqlTable("edit_log", {
+  id: int("id").autoincrement().primaryKey(),
+  geeTxn: varchar("gee_txn", { length: 32 }).notNull(),
+  field: varchar("field", { length: 32 }),
+  oldValue: text("old_value"),
+  newValue: text("new_value"),
+  editedBy: varchar("edited_by", { length: 64 }),
+  reason: varchar("reason", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type EditLog = typeof editLog.$inferSelect;
+export type InsertEditLog = typeof editLog.$inferInsert;
+
+// ─── Platform Fee Configurations ─────────────────────────────────────────────
+export const platformFeeConfigurations = mysqlTable("platform_fee_configurations", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  platform: varchar("platform", { length: 50 }).notNull(),
+  feeType: varchar("feeType", { length: 50 }).notNull().default("host_pays"),
+  commissionPct: decimal("commissionPct", { precision: 5, scale: 2 }).default("0"),
+  processingFeePct: decimal("processingFeePct", { precision: 5, scale: 2 }).default("0"),
+  processingFeeFixed: decimal("processingFeeFixed", { precision: 10, scale: 2 }).default("0"),
+  taxOnFees: boolean("taxOnFees").default(false),
+  isDefault: boolean("isDefault").default(false),
+  isActive: boolean("isActive").default(true),
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow(),
+});
+export type PlatformFeeConfiguration = typeof platformFeeConfigurations.$inferSelect;
+export type InsertPlatformFeeConfiguration = typeof platformFeeConfigurations.$inferInsert;
+
+// ─── Vertical Expense Configs ─────────────────────────────────────────────────
+export const verticalExpenseConfigs = mysqlTable("vertical_expense_configs", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  verticalId: varchar("verticalId", { length: 36 }).notNull(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  defaultCoaCategoryId: varchar("defaultCoaCategoryId", { length: 36 }),
+  defaultQboClass: varchar("defaultQboClass", { length: 100 }),
+  defaultQboCustomer: varchar("defaultQboCustomer", { length: 100 }),
+  requireApproval: boolean("requireApproval").default(false),
+  approvalThreshold: decimal("approvalThreshold", { precision: 14, scale: 2 }),
+  receiptRequiredAbove: decimal("receiptRequiredAbove", { precision: 14, scale: 2 }).default("25.00"),
+  isActive: boolean("isActive").default(true),
+  createdAt: timestamp("createdAt").defaultNow(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow(),
+});
+export type VerticalExpenseConfig = typeof verticalExpenseConfigs.$inferSelect;
+export type InsertVerticalExpenseConfig = typeof verticalExpenseConfigs.$inferInsert;
+
+// ─── Webhook Tokens ───────────────────────────────────────────────────────────
+export const webhookTokens = mysqlTable("webhook_tokens", {
+  channelId: varchar("channelId", { length: 100 }).primaryKey(),
+  token: varchar("token", { length: 255 }).notNull(),
+  calendarId: varchar("calendarId", { length: 36 }).notNull(),
+  expiresAt: timestamp("expiresAt"),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+export type WebhookToken = typeof webhookTokens.$inferSelect;
+export type InsertWebhookToken = typeof webhookTokens.$inferInsert;
+
+// ─── Guardian Audit Log ───────────────────────────────────────────────────────
+export const guardianAuditLog = mysqlTable("guardian_audit_log", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  guardrailId: varchar("guardrailId", { length: 10 }).notNull(),
+  severity: mysqlEnum("severity", ["info", "warning", "critical", "emergency"]).notNull().default("info"),
+  action: varchar("action", { length: 50 }).notNull(),
+  actorId: varchar("actorId", { length: 36 }),
+  targetId: varchar("targetId", { length: 36 }),
+  details: json("details"),
+  resolvedAt: timestamp("resolvedAt"),
+  resolvedBy: varchar("resolvedBy", { length: 36 }),
+  createdAt: timestamp("createdAt").defaultNow(),
+});
+export type GuardianAuditLog = typeof guardianAuditLog.$inferSelect;
+export type InsertGuardianAuditLog = typeof guardianAuditLog.$inferInsert;
+
+// ─── Guardian Config ──────────────────────────────────────────────────────────
+export const guardianConfig = mysqlTable("guardian_config", {
+  householdId: varchar("householdId", { length: 36 }).primaryKey(),
+  gr1Enabled: boolean("gr1Enabled").default(true),
+  gr2Enabled: boolean("gr2Enabled").default(true),
+  gr3Enabled: boolean("gr3Enabled").default(true),
+  gr4Enabled: boolean("gr4Enabled").default(true),
+  gr5Enabled: boolean("gr5Enabled").default(true),
+  gr6Enabled: boolean("gr6Enabled").default(true),
+  gr7Enabled: boolean("gr7Enabled").default(true),
+  gr1AutoFix: boolean("gr1AutoFix").default(true),
+  gr2AutoFix: boolean("gr2AutoFix").default(true),
+  gr3AutoFix: boolean("gr3AutoFix").default(true),
+  gr4AutoFix: boolean("gr4AutoFix").default(true),
+  gr5AutoFix: boolean("gr5AutoFix").default(false),
+  gr6AutoFix: boolean("gr6AutoFix").default(true),
+  gr7AutoFix: boolean("gr7AutoFix").default(false),
+  alertEmail: varchar("alertEmail", { length: 255 }).default("tarik@tjperkinsfam.com"),
+  emergencyPhone: varchar("emergencyPhone", { length: 50 }),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow(),
+});
+export type GuardianConfig = typeof guardianConfig.$inferSelect;
+export type InsertGuardianConfig = typeof guardianConfig.$inferInsert;

@@ -4,7 +4,7 @@ type Theme = "light" | "dark";
 
 interface ThemeContextType {
   theme: Theme;
-  toggleTheme: () => void;
+  toggleTheme?: () => void;
   switchable: boolean;
 }
 
@@ -16,42 +16,40 @@ interface ThemeProviderProps {
   switchable?: boolean;
 }
 
-function getSystemTheme(): Theme {
-  if (typeof window !== "undefined" && window.matchMedia("(prefers-color-scheme: dark)").matches) {
-    return "dark";
-  }
-  return "dark"; // default to dark per brand spec
-}
-
 export function ThemeProvider({
   children,
-  defaultTheme,
-  switchable = true,
+  defaultTheme = "light",
+  switchable = false,
 }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>(() => {
-    const stored = localStorage.getItem("geeves-theme");
-    if (stored === "light" || stored === "dark") return stored;
-    return defaultTheme ?? getSystemTheme();
+    if (switchable) {
+      const stored = localStorage.getItem("theme");
+      return (stored as Theme) || defaultTheme;
+    }
+    return defaultTheme;
   });
 
   useEffect(() => {
     const root = document.documentElement;
     if (theme === "dark") {
       root.classList.add("dark");
-      root.classList.remove("light");
     } else {
-      root.classList.add("light");
       root.classList.remove("dark");
     }
-    localStorage.setItem("geeves-theme", theme);
-  }, [theme]);
 
-  const toggleTheme = () => {
-    setTheme(prev => (prev === "light" ? "dark" : "light"));
-  };
+    if (switchable) {
+      localStorage.setItem("theme", theme);
+    }
+  }, [theme, switchable]);
+
+  const toggleTheme = switchable
+    ? () => {
+        setTheme(prev => (prev === "light" ? "dark" : "light"));
+      }
+    : undefined;
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme, switchable: true }}>
+    <ThemeContext.Provider value={{ theme, toggleTheme, switchable }}>
       {children}
     </ThemeContext.Provider>
   );

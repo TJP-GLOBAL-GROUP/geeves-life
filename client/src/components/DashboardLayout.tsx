@@ -1,5 +1,5 @@
 import { useAuth } from "@/_core/hooks/useAuth";
-import { GeevesConstellationMark } from "@/components/GeevesLogo";
+import GeevesLogo, { GeevesConstellationMark } from "@/components/GeevesLogo";
 import { Avatar, AvatarFallback } from "@/components/ui/avatar";
 import {
   DropdownMenu,
@@ -204,12 +204,7 @@ export default function DashboardLayout({
       <div className="flex items-center justify-center min-h-screen bg-background">
         <div className="flex flex-col items-center gap-8 p-8 max-w-md w-full">
           <div className="flex flex-col items-center gap-2">
-            <img
-              src="/manus-storage/universal_logo_34c85c76.svg"
-              alt="Geeves.Life — Operating System"
-              className="w-48 h-48 object-contain"
-              draggable={false}
-            />
+            <GeevesLogo size={36} showWordmark showTagline theme="dark" />
             <p className="text-sm text-muted-foreground text-center max-w-sm">
               Your intelligent life orchestrator. Sign in to get started.
             </p>

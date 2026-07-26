@@ -609,21 +609,11 @@ export const expenseCategorisationRouter = router({
       });
     }
 
-    // Vertical icon/color mapping
-    const VERTICAL_STYLES: Record<string, { icon: string; color: string }> = {
-      "tjpfam-vert-home": { icon: "home", color: "#E8624A" },
-      "tjpfam-vert-bakery": { icon: "briefcase", color: "#4F7EC4" },
-      "tjpfam-vert-market": { icon: "shopping-cart", color: "#D4A017" },
-      "tjpfam-vert-self": { icon: "user", color: "#8B5CF6" },
-      "tjpfam-vert-startout": { icon: "globe", color: "#E8943A" },
-      "c3pW-Cxhm9WAQZ17pTMb3": { icon: "building", color: "#2DD4BF" },
-    };
-
     const verticals = (vertResult as any[]).map((v: any) => ({
       id: v.id,
       name: v.name,
-      icon: VERTICAL_STYLES[v.id]?.icon || "folder",
-      color: VERTICAL_STYLES[v.id]?.color || "#6B7280",
+      icon: v.icon || "folder",
+      color: v.color || "#6B7280",
     }));
 
     // Get properties for Bohemian Lodges

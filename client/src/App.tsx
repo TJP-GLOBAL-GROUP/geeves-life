@@ -36,6 +36,7 @@ import ExpenseCategorisation from "@/pages/ExpenseCategorisation";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
 import Landing from "@/pages/Landing";
+import QboEula from "@/pages/QboEula";
 import Login from "@/pages/Login";
 import { useDeviceLocation } from "@/hooks/useDeviceLocation";
 
@@ -49,6 +50,7 @@ function Router() {
       <Route path="/invitation-accept" component={InvitationAccept} />
       <Route path="/privacy" component={PrivacyPolicy} />
       <Route path="/terms" component={TermsOfService} />
+      <Route path="/legal/qbo-eula" component={QboEula} />
       {/* All other routes get the dashboard layout */}
       <Route>
         <DashboardLayout>

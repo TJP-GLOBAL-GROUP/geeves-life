@@ -1192,7 +1192,7 @@ function SessionsList() {
         <CardContent className="pt-5 pb-5">
           <h3 className="text-sm font-medium text-zinc-300 mb-3 flex items-center gap-2">
             <Bot className="w-4 h-4 text-primary" />
-            How Geeves Shopping Works
+            How Geeves Works
           </h3>
           <div className="grid grid-cols-1 md:grid-cols-4 gap-4 text-xs text-zinc-400">
             <div className="flex gap-2">

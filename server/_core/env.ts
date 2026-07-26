@@ -9,4 +9,12 @@ export const ENV = {
   forgeApiKey: process.env.BUILT_IN_FORGE_API_KEY ?? "",
   resendApiKey: process.env.RESEND_API_KEY ?? "",
   systemCronSecret: process.env.SYSTEM_CRON_SECRET ?? "",
+  gcsBucketName: process.env.GCS_BUCKET_NAME ?? "",
+  googleCredentialsJson: process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON ?? "",
+  shadowBlockEngineEnabled: process.env.SHADOW_BLOCK_ENGINE_ENABLED !== "false",
+  enableWebhookTokenCheck: process.env.ENABLE_WEBHOOK_TOKEN_CHECK === "true",
+  guardianEnabled: process.env.GUARDIAN_ENABLED !== "false",
+  guardianAutoFix: process.env.GUARDIAN_AUTO_FIX !== "false",
+  guardianAlertEmail: process.env.GUARDIAN_ALERT_EMAIL ?? "tarik@tjperkinsfam.com",
+  guardianEmergencyPhone: process.env.GUARDIAN_EMERGENCY_PHONE ?? "",
 };

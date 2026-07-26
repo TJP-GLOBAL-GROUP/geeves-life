@@ -4,7 +4,6 @@ import { systemRouter } from "./_core/systemRouter";
 import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
-import { resolveCanonicalAccountId, registerCardNumber } from "./services/accountCanonicalization";
 import { writeAuditLog } from "./db";
 import { invokeLLM } from "./_core/llm";
 import { storagePut } from "./storage";
@@ -122,6 +121,8 @@ export const appRouter = router({
   expenseCategorisation: expenseCategorisationRouter,
   invoiceExtraction: invoiceExtractionRouter,
   notificationSettings: notificationSettingsRouter,
+  onboarding: onboardingRouter,
+  platformConfig: platformConfigRouter,
   dashboard: router({
     getLayout: protectedProcedure.query(async ({ ctx }) => {
       const member = await db.getHouseholdMemberByUserId(ctx.user.id);
@@ -407,16 +408,7 @@ export const appRouter = router({
       currency: z.string().default("USD"),
       lastFourDigits: z.string().max(4).nullable().optional(),
       currentBalance: z.string().nullable().optional(),
-    })).mutation(async ({ ctx, input }) => {
-      // Card grouping: a replacement/virtual number must attach to the canonical
-      // account instead of creating a duplicate (migration 0007).
-      const canonicalId = await resolveCanonicalAccountId(ctx.user.id, input.lastFourDigits);
-      if (canonicalId) {
-        if (input.lastFourDigits) await registerCardNumber(canonicalId, input.lastFourDigits);
-        return { id: canonicalId, merged: true };
-      }
-      return db.createBankAccount({ ...input, userId: ctx.user.id, householdId: ctx.user.householdId });
-    }),
+    })).mutation(({ ctx, input }) => db.createBankAccount({ ...input, userId: ctx.user.id, householdId: ctx.user.householdId })),
 
     update: protectedProcedure.input(z.object({
       id: z.number(),
@@ -1817,3 +1809,5 @@ Be thorough — capture every item even if handwriting is difficult to read. Mak
 });
 
 export type AppRouter = typeof appRouter;
+import { onboardingRouter } from "./routers/onboarding";
+import { platformConfigRouter } from "./routers/platformConfig";

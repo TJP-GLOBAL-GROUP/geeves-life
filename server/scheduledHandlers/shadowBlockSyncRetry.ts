@@ -49,6 +49,11 @@ export async function shadowBlockSyncRetryHandler(req: Request, res: Response) {
 
   // Authenticate via Manus cron gateway. Allow localhost for dev/test.
   try {
+    // Kill switch
+    if (!ENV.shadowBlockEngineEnabled) {
+      console.log("[ShadowBlockSyncRetry] Engine disabled (SHADOW_BLOCK_ENGINE_ENABLED=false) — skipping");
+      return res.status(200).json({ skipped: true, reason: "shadow_block_engine_disabled" });
+    }
     const user = await sdk.authenticateRequest(req);
     if (!user.isCron) {
       const ip = req.ip ?? "";
@@ -339,3 +344,4 @@ export async function shadowBlockSyncRetryHandler(req: Request, res: Response) {
     return res.status(500).json({ error: (err as Error)?.message });
   }
 }
+import { ENV } from "../_core/env";

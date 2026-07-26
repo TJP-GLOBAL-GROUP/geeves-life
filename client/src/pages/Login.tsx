@@ -10,6 +10,7 @@ import { useEffect } from "react";
 import { useLocation } from "wouter";
 import { trpc } from "@/lib/trpc";
 import { getGoogleLoginUrl } from "@/const";
+import GeevesLogo from "@/components/GeevesLogo";
 
 const TEAL = "#2AAFA9";
 const CHARCOAL = "#1A1C20";
@@ -67,12 +68,7 @@ export default function Login() {
 
       <div className="relative z-10 flex flex-col items-center gap-8 max-w-sm w-full">
         {/* Logo */}
-        <img
-          src="/manus-storage/universal_logo_34c85c76.svg"
-          alt="Geeves.Life — Operating System"
-          className="w-44 h-auto"
-          draggable={false}
-        />
+        <GeevesLogo size={36} showWordmark showTagline theme="dark" />
 
         {/* Card */}
         <div

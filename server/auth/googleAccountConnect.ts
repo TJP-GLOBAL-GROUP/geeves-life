@@ -372,3 +372,59 @@ async function autoDiscoverCalendarsForAccount(
     console.error(`[AccountConnect] Discovery failed for ${accountEmail}:`, error);
   }
 }
+
+/**
+ * After a reconnect, perform a full sync for all calendars belonging to the reconnected
+ * account. This clears stale sync tokens (e.g. from a JWT_SECRET rotation after migration)
+ * and pulls all recent events immediately without waiting for the next webhook push.
+ */
+async function triggerFullSyncForReconnectedAccount(
+  householdId: string,
+  _memberId: string,
+  accountEmail: string,
+  accessToken: string
+): Promise<void> {
+  const { performFullSync } = await import("../services/googleCalendarSync");
+  const { emitSyncStatus } = await import("../realtime");
+  console.log(`[AccountConnect] Post-reconnect full sync starting for ${accountEmail}`);
+  try {
+    const allCalendars = await db.getCalendars(householdId);
+    const accountCalendars = allCalendars.filter((c: any) => c.accountEmail === accountEmail);
+    if (accountCalendars.length === 0) {
+      console.log(`[AccountConnect] No calendars found for ${accountEmail} — skipping post-reconnect sync`);
+      return;
+    }
+    console.log(`[AccountConnect] Post-reconnect: syncing ${accountCalendars.length} calendar(s) for ${accountEmail}`);
+    let synced = 0;
+    let errors = 0;
+    for (const cal of accountCalendars) {
+      if (!cal.externalId) {
+        console.warn(`[AccountConnect] Skipping calendar "${cal.name}" — no externalId`);
+        continue;
+      }
+      try {
+        emitSyncStatus(householdId, cal.id, "syncing");
+        // Clear stale sync token so performFullSync does a clean pull from Google
+        await db.updateCalendarSyncToken(cal.id, "");
+        await performFullSync(accessToken, cal.externalId, cal.id, householdId, {
+          upsertEvent: async (event) => {
+            await db.upsertEvent({ id: randomUUID(), ...event, source: "sync" });
+          },
+          updateSyncToken: async (calId: string, token: string) => {
+            await db.updateCalendarSyncToken(calId, token);
+          },
+        });
+        emitSyncStatus(householdId, cal.id, "synced");
+        console.log(`[AccountConnect] Post-reconnect sync complete for "${cal.name}" (${accountEmail})`);
+        synced++;
+      } catch (syncErr: unknown) {
+        emitSyncStatus(householdId, cal.id, "error", String(syncErr));
+        console.warn(`[AccountConnect] Post-reconnect sync failed for "${cal.name}":`, syncErr);
+        errors++;
+      }
+    }
+    console.log(`[AccountConnect] Post-reconnect full sync done for ${accountEmail}: ${synced} synced, ${errors} errors`);
+  } catch (err: unknown) {
+    console.error(`[AccountConnect] Post-reconnect full sync error for ${accountEmail}:`, err);
+  }
+}

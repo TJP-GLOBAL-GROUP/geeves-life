@@ -1,11 +1,13 @@
 import { z } from "zod";
 import { router, protectedProcedure } from "../_core/trpc";
 import { getDb, writeAuditLog } from "../db";
-import { invoiceExtractions, bankAccounts } from "../../drizzle/schema";
+import { invoiceExtractions, bankAccounts, expenses } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { storagePut } from "../storage";
 import { invokeLLM } from "../_core/llm";
 import { nanoid } from "nanoid";
+import { sql } from "drizzle-orm";
+import { TRPCError } from "@trpc/server";
 
 export const invoiceExtractionRouter = router({
   /**
@@ -439,5 +441,98 @@ export const invoiceExtractionRouter = router({
       });
 
       return { success: true };
+    }),
+
+  /**
+   * List invoice extractions for a household (bridge: makes captured invoices visible in the expense tool).
+   */
+  list: protectedProcedure
+    .input(z.object({
+      householdId: z.string().min(1),
+      status: z.enum(["pending", "converted", "ignored"]).optional(),
+      limit: z.number().min(1).max(100).default(50),
+    }))
+    .query(async ({ input, ctx }) => {
+      const drizzle = await getDb();
+      if (!drizzle) throw new Error("Database unavailable");
+      const rows = await drizzle.execute(sql`
+        SELECT * FROM invoice_extractions
+        WHERE householdId = ${input.householdId}
+        ${input.status ? sql`AND status = ${input.status}` : sql``}
+        ORDER BY createdAt DESC
+        LIMIT ${input.limit}
+      `);
+      const result = Array.isArray(rows) ? rows[0] : rows;
+      return (result as unknown as any[]) || [];
+    }),
+
+  /**
+   * Convert a captured invoice extraction into a proper expense record.
+   */
+  convertToExpense: protectedProcedure
+    .input(z.object({
+      extractionId: z.string().min(1),
+      propertyId: z.string().optional(),
+      memberId: z.string().optional(),
+      verticalId: z.string().min(1),
+      coaCategoryId: z.string().optional(),
+    }))
+    .mutation(async ({ input, ctx }) => {
+      const drizzle = await getDb();
+      if (!drizzle) throw new Error("Database unavailable");
+
+      const [extraction] = await drizzle
+        .select()
+        .from(invoiceExtractions)
+        .where(eq(invoiceExtractions.id, input.extractionId));
+
+      if (!extraction) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "Invoice extraction not found" });
+      }
+
+      const expenseId = nanoid();
+      const householdId = extraction.householdId;
+      const amount = Number(extraction.orderTotal || 0);
+      const vendor = extraction.vendorName || "Unknown";
+      const description = `Invoice from ${vendor}`;
+      const expenseDate = extraction.orderDate
+        ? new Date(extraction.orderDate).toISOString().slice(0, 10)
+        : new Date().toISOString().slice(0, 10);
+
+      await drizzle.execute(sql`
+        INSERT INTO expenses (
+          id, householdId, amount, currency, description, expenseDate,
+          vendor, propertyId_exp, memberId, verticalId, coaCategoryId,
+          source, status, createdAt
+        ) VALUES (
+          ${expenseId}, ${householdId}, ${amount}, 'USD',
+          ${description}, ${expenseDate}, ${vendor},
+          ${input.propertyId || null}, ${input.memberId || null},
+          ${input.verticalId}, ${input.coaCategoryId || null},
+          'invoice_capture', 'uncategorized', NOW()
+        )
+      `);
+
+      await drizzle.execute(sql`
+        UPDATE invoice_extractions
+        SET status = 'converted', convertedExpenseId = ${expenseId}, convertedAt = NOW()
+        WHERE id = ${input.extractionId}
+      `);
+
+      await writeAuditLog({
+        actorUserId: ctx.user.id,
+        actorOpenId: ctx.user.openId,
+        actorName: ctx.user.name || undefined,
+        actorType: "user",
+        householdId,
+        action: "invoice_converted_to_expense",
+        category: "invoice_extraction",
+        resourceType: "expense",
+        resourceId: expenseId,
+        outcome: "success",
+        metadata: { extractionId: input.extractionId, amount, vendor },
+      });
+
+      return { success: true, expenseId };
     }),
 });

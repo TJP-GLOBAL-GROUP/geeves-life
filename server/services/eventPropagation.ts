@@ -277,7 +277,7 @@ export async function onEventUpserted(
     const srcCal = await db.getCalendar(event.calendarId);
     if (!srcCal || !srcCal.verticalId) {
       // B1: Loud error + throw so the webhook retry queue can re-attempt
-      console.error(`[Propagation] CRITICAL: Event ${eventId} calendar ${srcCal?.id} has no verticalId. Propagation aborted.`);
+      console.error(`[Propagation] CRITICAL: Event ${eventId} on calendar "${(srcCal as any)?.name || 'unknown'}" (${srcCal?.id}, household: ${(srcCal as any)?.householdId || 'unknown'}) has no verticalId. Propagation aborted.`);
       throw new Error(`Calendar ${srcCal?.id || 'unknown'} has no verticalId — cannot propagate event ${eventId}`);
     }
 
@@ -376,7 +376,7 @@ export async function onEventUpserted(
     for (const target of targets) {
       // ── Per-calendar rate limit check ──────────────────────────────────
       if (!options.skipRateLimit && checkCalendarRateLimit(target.calendarId)) {
-        console.warn(`[Propagation] ⏸ Rate limit reached for calendar ${target.calendarId} — skipping write`);
+        console.warn(`[Propagation] ⏸ Calendar ${target.calendarId} hit hourly cap (${PER_CALENDAR_HOURLY_CAP}/hr). Queuing retry for remaining targets.`);
         enqueuePropagationRetry(eventId, householdId, "rate_limit").catch(() => {});
         continue;
       }

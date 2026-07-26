@@ -24,6 +24,12 @@ export async function shadowBlockBackfillHandler(req: Request, res: Response) {
     return res.status(401).json({ error: "Unauthorized" });
   }
 
+  // Kill switch
+  if (!ENV.shadowBlockEngineEnabled) {
+    console.log("[ShadowBlockBackfill] Engine disabled (SHADOW_BLOCK_ENGINE_ENABLED=false) — skipping");
+    return res.status(200).json({ skipped: true, reason: "shadow_block_engine_disabled" });
+  }
+
   const conn = await getDb();
   if (!conn) return res.status(503).json({ error: "DB unavailable" });
 

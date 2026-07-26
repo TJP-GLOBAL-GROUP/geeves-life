@@ -1,28 +1,4 @@
 /**
- * ⚠️ CRITICAL OPERATIONAL NOTE ⚠️
- *
- * generateOutboundICS() generates the S3-hosted ICS file that platforms
- * (Booking.com, Airbnb, VRBO) consume for availability. This file MUST
- * stay in sync with the propertyBookings table.
- *
- * ICS is regenerated automatically via:
- *   1. icalPollHandler after each successful platform poll (every 10 min)
- *   2. processIcsRegenerationQueue() draining the ics_regeneration_queue table
- *   3. Manual queue via queueIcsRegeneration() from icsRegenerationQueue.ts
- *   4. Live endpoint /api/ical/:propertyId.ics generates fresh on every request
- *
- * ⚠️ DB TRIGGERS NOT AVAILABLE: TiDB Serverless does not support MySQL triggers.
- *    If you modify propertyBookings via RAW SQL (feed swaps, migrations,
- *    bulk updates), you MUST manually call:
- *      await queueIcsRegeneration(propertyId, "reason");
- *    after the raw SQL update, OR hit the reconciliation endpoint:
- *      POST /api/scheduled/ics-reconcile
- *
- * A stale outbound ICS = double-bookings on Booking.com.
- * Incident reference: Jul 10, 2026 — CDN-cached ICS caused double-booking.
- */
-
-/**
  * iCal Aggregator Service
  *
  * Polls inbound iCal feeds from short-term rental platforms (Airbnb, VRBO, Booking.com, direct),
@@ -493,7 +469,7 @@ function computeSundayHolidayBlocks(
 /**
  * Fetches and parses an iCal URL, returning normalized booking entries.
  */
-async function fetchAndParseICal(icalUrl: string, platform?: string, propertyId?: string): Promise<Array<{
+async function fetchAndParseICal(icalUrl: string, platform?: string): Promise<Array<{
   icalUid: string;
   summary: string;
   description: string;
@@ -551,16 +527,8 @@ async function fetchAndParseICal(icalUrl: string, platform?: string, propertyId?
       bookingType = "booking";
     }
 
-    // BUG FIX #2 (2026-07-25): events without a stable UID (Booking.com often omits
-    // UID) previously got a randomUUID() per poll → duplicate inserts + ghost
-    // cancellations. Use a deterministic UID derived from property + date range so
-    // the same stay maps to the same icalUid across polls.
-    const stableUid = event.uid
-      ? String(event.uid)
-      : `${platform}-${propertyId ?? "unknown"}-${start.getTime()}-${end.getTime()}`;
-
     results.push({
-      icalUid: stableUid,
+      icalUid: String(event.uid || randomUUID()),
       summary,
       description,
       checkIn: start.getTime(),
@@ -632,7 +600,7 @@ export async function aggregatePlatformICal(platformId: string): Promise<Aggrega
 
   let parsedEvents: Awaited<ReturnType<typeof fetchAndParseICal>> = [];
   try {
-    parsedEvents = await fetchAndParseICal(platform.icalUrl, platform.platform, platform.propertyId);
+    parsedEvents = await fetchAndParseICal(platform.icalUrl, platform.platform);
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     result.errors.push(`Failed to fetch/parse iCal: ${msg}`);
@@ -716,18 +684,6 @@ export async function aggregatePlatformICal(platformId: string): Promise<Aggrega
     .map((e) => e.icalUid)
     .filter((uid): uid is string => !!uid);
 
-  // BUG FIX #1 (2026-07-25): guard against cascade cancellation. If the feed
-  // returned zero identifiable events it is almost always a transient error
-  // (CDN cache, rate limit, server 5xx) — NOT that every booking was cancelled.
-  // The `liveUids.length > 0` check below already prevents the empty-NOT-IN
-  // match; this branch records it explicitly for observability.
-  if (liveUids.length === 0) {
-    result.errors.push(
-      "iCal feed returned zero identifiable events — skipping cancellation detection to prevent cascade cancel",
-    );
-    return result;
-  }
-
   if (liveUids.length > 0) {
     // Find confirmed bookings for this platform that have an icalUid NOT in the live feed
     const staleRows = await d
@@ -749,31 +705,14 @@ export async function aggregatePlatformICal(platformId: string): Promise<Aggrega
       const autoCancelIds: string[] = [];
       const pendingIds: string[] = [];
 
-      // BUG FIX #3 (2026-07-25): 30-minute grace period before auto-cancelling.
-      // Booking.com's CDN caches iCal feeds aggressively — a booking can vanish
-      // from one poll and reappear in the next. Only auto-cancel rows that have
-      // been missing for at least GRACE_PERIOD_MS (approximated via updatedAt,
-      // which is bumped whenever the row is seen/updated by a poll).
-      const GRACE_PERIOD_MS = 30 * 60 * 1000; // 30 minutes
-
       for (const row of staleRows) {
         const src = (row as any).dataSource as string | undefined;
         if (src === 'both') {
           // Email also confirmed this booking — require email cancellation signal too
           pendingIds.push(row.id);
         } else {
-          const updatedAtMs =
-            row.updatedAt instanceof Date ? row.updatedAt.getTime() : Number(row.updatedAt) || 0;
-          const timeSinceLastUpdate = Date.now() - updatedAtMs;
-          if (timeSinceLastUpdate < GRACE_PERIOD_MS) {
-            // Within grace period — don't cancel yet, keep under observation
-            result.errors.push(
-              `Booking ${row.id} missing from feed but within ${GRACE_PERIOD_MS / 60000}min grace period — not cancelling yet`,
-            );
-          } else {
-            // Outside grace period — iCal-only booking, safe to auto-cancel
-            autoCancelIds.push(row.id);
-          }
+          // iCal-only booking — iCal removal is sufficient
+          autoCancelIds.push(row.id);
         }
       }
 
@@ -936,10 +875,10 @@ export async function aggregatePropertyICals(propertyId: string): Promise<Aggreg
  *   the cleaning window between consecutive bookings falls entirely on blocked days)
  * - Custom blackout dates
  *
- * Returns the raw ICS content string. Used by the live /api/ical endpoint
- * so external platforms always receive fresh, uncached availability data.
+ * The ICS is uploaded to S3 and the URL is returned.
+ * Platforms subscribe to this URL to receive availability updates.
  */
-export async function generateOutboundICSContent(propertyId: string): Promise<string> {
+export async function generateOutboundICS(propertyId: string): Promise<string> {
   const dg = await getDb();
   if (!dg) throw new Error("Database not available");
   const [property] = await dg
@@ -1074,31 +1013,115 @@ export async function generateOutboundICSContent(propertyId: string): Promise<st
     }
   }
 
-  return String(cal.toString());
+  // Upload to S3
+  const icsContent = String(cal.toString());
+  const fileKey = `property-ical/${propertyId}/availability.ics`;
+  const { url } = await storagePut(fileKey, Buffer.from(icsContent, "utf-8"), "text/calendar");
+
+  return url;
 }
 
 /**
- * Generates the outbound ICS and uploads a snapshot to S3 (legacy path).
- *
- * WARNING: The S3/CloudFront URL is aggressively cached by the CDN and may serve
- * stale content for weeks. External platforms MUST subscribe to the live endpoint
- * (/api/ical/:propertyId.ics) instead. This function is kept for backwards
- * compatibility and returns the live endpoint URL when APP_URL is available.
+ * generateOutboundICSContent — same as generateOutboundICS but returns the raw ICS string
+ * instead of uploading to GCS. Used by the live /api/ical/:propertyId.ics endpoint and tests.
+ * The live endpoint serves this directly with no-cache headers, eliminating the CDN stale-cache
+ * issue (Jul 2026) that caused double bookings on Booking.com.
  */
-export async function generateOutboundICS(propertyId: string): Promise<string> {
-  const icsContent = await generateOutboundICSContent(propertyId);
-  const fileKey = `property-ical/${propertyId}/availability.ics`;
-  // Best-effort S3 snapshot (do not fail the caller if upload has issues)
-  try {
-    await storagePut(fileKey, Buffer.from(icsContent, "utf-8"), "text/calendar");
-  } catch (e) {
-    console.warn("[iCal] S3 snapshot upload failed (live endpoint unaffected):", e);
+export async function generateOutboundICSContent(propertyId: string): Promise<string> {
+  const dg = await getDb();
+  if (!dg) throw new Error("Database not available");
+  const [property] = await dg
+    .select()
+    .from(properties)
+    .where(eq(properties.id, propertyId))
+    .limit(1);
+
+  if (!property) throw new Error(`Property ${propertyId} not found`);
+
+  // Fetch all confirmed bookings for this property (exclude cancelled)
+  const bookings = await dg
+    .select({ id: propertyBookings.id, platformId: propertyBookings.platformId, checkIn: propertyBookings.checkIn, checkOut: propertyBookings.checkOut, summary: propertyBookings.summary, bookingType: propertyBookings.bookingType, blockReason: propertyBookings.blockReason })
+    .from(propertyBookings)
+    .where(and(eq(propertyBookings.propertyId, propertyId), eq(propertyBookings.bookingStatus, "confirmed")));
+
+  // Fetch prep rules
+  const [prepRule] = await dg
+    .select()
+    .from(propertyPrepRules)
+    .where(eq(propertyPrepRules.propertyId, propertyId))
+    .limit(1);
+
+  // Fetch platform names for descriptions
+  type PlatformRow = { id: string; platform: string; displayName: string | null };
+  const platforms = await dg
+    .select({ id: propertyPlatforms.id, platform: propertyPlatforms.platform, displayName: propertyPlatforms.displayName })
+    .from(propertyPlatforms)
+    .where(eq(propertyPlatforms.propertyId, propertyId)) as PlatformRow[];
+
+  const platformMap = new Map(platforms.map((p: PlatformRow) => [p.id, p]));
+
+  const cal = new ICalCalendar({
+    name: `${property.name} — Geeves.Life Availability`,
+    description: `Managed availability calendar for ${property.name}. Blocked by Geeves.Life.`,
+    timezone: "UTC",
+  });
+
+  const MS_PER_DAY = 86400000;
+  const propertyTimezone = property.timezone ?? "America/New_York";
+
+  for (const booking of bookings) {
+    const platformInfo = platformMap.get(booking.platformId);
+    const platformName = platformInfo?.displayName || platformInfo?.platform || "Unknown platform";
+
+    if (booking.bookingType === "booking") {
+      cal.createEvent({
+        start: new Date(booking.checkIn),
+        end: new Date(booking.checkOut),
+        summary: `BOOKED — ${platformName}`,
+        description: `Booking from ${platformName}. Managed by Geeves.Life.`,
+        busystatus: "BUSY" as any,
+      });
+
+      if (prepRule) {
+        if (prepRule.blockDaysBefore > 0) {
+          const prepStart = booking.checkIn - prepRule.blockDaysBefore * MS_PER_DAY;
+          cal.createEvent({
+            start: new Date(prepStart),
+            end: new Date(booking.checkIn),
+            summary: `PREP — ${property.name}`,
+            description: `Pre-arrival prep block. Managed by Geeves.Life.`,
+            busystatus: "BUSY" as any,
+          });
+        }
+        if (prepRule.blockDaysAfter > 0) {
+          const prepEnd = booking.checkOut + prepRule.blockDaysAfter * MS_PER_DAY;
+          cal.createEvent({
+            start: new Date(booking.checkOut),
+            end: new Date(prepEnd),
+            summary: `PREP — ${property.name}`,
+            description: `Post-departure prep block. Managed by Geeves.Life.`,
+            busystatus: "BUSY" as any,
+          });
+        }
+      }
+    } else if (booking.bookingType === "block") {
+      cal.createEvent({
+        start: new Date(booking.checkIn),
+        end: new Date(booking.checkOut),
+        summary: `BLOCKED — ${booking.blockReason ?? "Owner block"}`,
+        description: `Manual block. Managed by Geeves.Life.`,
+        busystatus: "BUSY" as any,
+      });
+    } else if (booking.bookingType === "unavailable") {
+      cal.createEvent({
+        start: new Date(booking.checkIn),
+        end: new Date(booking.checkOut),
+        summary: `BOOKED — Direct Booking`,
+        description: `Direct booking. Managed by Geeves.Life.`,
+        busystatus: "BUSY" as any,
+      });
+    }
   }
-  // Prefer the live, uncached endpoint URL
-  const appUrl = process.env.APP_URL?.replace(/\/+$/, "");
-  if (appUrl) {
-    return `${appUrl}/api/ical/${propertyId}.ics`;
-  }
-  const { url } = await storagePut(fileKey, Buffer.from(icsContent, "utf-8"), "text/calendar");
-  return url;
+
+  return String(cal.toString());
 }

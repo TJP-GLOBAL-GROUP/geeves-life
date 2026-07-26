@@ -2930,6 +2930,46 @@ export async function getMemberCalendarAccessBatch(
   return result;
 }
 
+// ─── getAllMemberCalendarAccessForHousehold ───────────────────────────────────
+/**
+ * B2: Load ALL member-vertical access rules for a household in a single query.
+ * Used by eventPropagation to avoid N sequential DB round-trips (one per target calendar).
+ */
+export async function getAllMemberCalendarAccessForHousehold(
+  householdId: string
+): Promise<Array<{ memberId: string; verticalId: string; excludeMultiDayEvents: boolean }>> {
+  const db = await getDb();
+  if (!db) return [];
+  const rows = await db
+    .select({
+      memberId: verticalMemberAccess.memberId,
+      verticalId: verticalMemberAccess.verticalId,
+      excludeMultiDayEvents: verticalMemberAccess.excludeMultiDayEvents,
+    })
+    .from(verticalMemberAccess)
+    .where(eq(verticalMemberAccess.householdId, householdId));
+  return rows.map(r => ({
+    memberId: r.memberId,
+    verticalId: r.verticalId,
+    excludeMultiDayEvents: r.excludeMultiDayEvents ?? false,
+  }));
+}
+
+// ─── getWebhookToken ──────────────────────────────────────────────────────────
+/**
+ * B4: Look up the stored token for a Google Calendar webhook channel.
+ * Returns null if no token is stored (token check disabled or channel not found).
+ */
+export async function getWebhookToken(channelId: string): Promise<string | null> {
+  const db = await getDb();
+  if (!db) return null;
+  const rows = await db.execute(sql`
+    SELECT token FROM webhook_tokens WHERE channelId = ${channelId} LIMIT 1
+  `);
+  const result = (Array.isArray(rows) ? rows[0] : rows) as unknown as any[];
+  return result?.[0]?.token ?? null;
+}
+
 // ─── Member Resources ─────────────────────────────────────────────────────────
 
 export async function getMemberResources(opts: {

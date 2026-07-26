@@ -337,15 +337,16 @@ async function executeTool(
           // Filter by vertical access rules: drop events on private verticals the member doesn't own,
           // and redact admin_only verticals to busy-only for non-admin/non-owner roles.
           const memberVerticalIds = new Set<number>();
+          // verticalId is a string (varchar) in the schema
           // Build set of verticals this member has access to (via their calendars)
           const memberCals = await db.getCalendarsByMember(member.id);
           for (const cal of memberCals) {
-            if (cal.verticalId) memberVerticalIds.add(cal.verticalId);
+            if (cal.verticalId) memberVerticalIds.add(cal.verticalId as any);
           }
           filteredEvts = evts.filter((e: any) => {
             const cal = memberCals.find((c: any) => c.id === e.calendarId);
-            const verticalPrivacy = cal?.verticalPrivacy || "household";
-            const isVerticalOwner = cal?.verticalOwnerId === member.id;
+            const verticalPrivacy = (cal as any)?.verticalPrivacy || "household";
+            const isVerticalOwner = (cal as any)?.verticalOwnerId === member.id;
             const visibility = canSeeVertical(member.role, verticalPrivacy, isVerticalOwner);
             return visibility !== "none";
           });
