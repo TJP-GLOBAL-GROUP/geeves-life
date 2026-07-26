@@ -52,7 +52,7 @@ export async function icalPollHandler(req: Request, res: Response) {
     }
 
     const platforms = await db
-      .select({ id: propertyPlatforms.id, propertyId: propertyPlatforms.propertyId, displayName: propertyPlatforms.displayName })
+      .select({ id: propertyPlatforms.id, propertyId: propertyPlatforms.propertyId, displayName: propertyPlatforms.displayName, icalUrl: propertyPlatforms.icalUrl })
       .from(propertyPlatforms)
       .where(eq(propertyPlatforms.isActive, true));
 
@@ -68,6 +68,14 @@ export async function icalPollHandler(req: Request, res: Response) {
     const propertyIds = new Set<string>();
 
     for (const platform of platforms) {
+      // BUGFIX #4: Skip platforms with no iCal URL (e.g., direct/manual booking platforms).
+      // These platforms don't have external feeds to poll — calling aggregatePlatformICal
+      // with an empty URL would trigger cancellation detection and mark all their bookings
+      // as cancelled (cascade cancellation bug).
+      if (!platform.icalUrl || platform.icalUrl.trim() === '') {
+        continue;
+      }
+
       try {
         const result = await aggregatePlatformICal(platform.id);
         polled++;
