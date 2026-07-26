@@ -527,8 +527,15 @@ async function fetchAndParseICal(icalUrl: string, platform?: string): Promise<Ar
       bookingType = "booking";
     }
 
+    // BUGFIX #2: Use a stable identifier for events that lack a UID (common with Booking.com).
+    // randomUUID() changes every poll, causing duplicate bookings + ghost cancellations.
+    // Stable hash: platform propertyId + checkIn + checkOut is deterministic across polls.
+    const stableUid = event.uid
+      ? String(event.uid)
+      : `stable-${(platform as any)?.propertyId ?? 'unknown'}-${start.getTime()}-${end.getTime()}`;
+
     results.push({
-      icalUid: String(event.uid || randomUUID()),
+      icalUid: stableUid,
       summary,
       description,
       checkIn: start.getTime(),
@@ -684,161 +691,137 @@ export async function aggregatePlatformICal(platformId: string): Promise<Aggrega
     .map((e) => e.icalUid)
     .filter((uid): uid is string => !!uid);
 
-  if (liveUids.length > 0) {
-    // Find confirmed bookings for this platform that have an icalUid NOT in the live feed
-    const staleRows = await d
-      .select()
-      .from(propertyBookings)
-      .where(
-        and(
-          eq(propertyBookings.platformId, platformId),
-          eq(propertyBookings.bookingStatus, "confirmed"),
-          notInArray(propertyBookings.icalUid, liveUids),
-        )
-      );
+  // BUGFIX #1: Guard against cascade cancellation when iCal feed is empty.
+  // An empty liveUids array means the feed returned zero identifiable events —
+  // typically a transient error (CDN cache miss, rate limit, server issue).
+  // NOT a signal that all bookings were cancelled.
+  if (liveUids.length === 0) {
+    result.errors.push("iCal feed returned zero identifiable events — skipping cancellation detection to prevent cascade cancel");
+    return result;
+  }
 
-    if (staleRows.length > 0) {
-      // P-31: 3-source cancellation flow
-      // If the booking was also confirmed by email (dataSource='both'), we need
-      // email to also confirm the cancellation before auto-cancelling.
-      // If dataSource='ical_only', iCal removal alone is sufficient to auto-cancel.
-      const autoCancelIds: string[] = [];
-      const pendingIds: string[] = [];
+  // Find confirmed bookings for this platform that have an icalUid NOT in the live feed
+  const staleRows = await d
+    .select()
+    .from(propertyBookings)
+    .where(
+      and(
+        eq(propertyBookings.platformId, platformId),
+        eq(propertyBookings.bookingStatus, "confirmed"),
+        notInArray(propertyBookings.icalUid, liveUids),
+      )
+    );
 
-      for (const row of staleRows) {
-        const src = (row as any).dataSource as string | undefined;
-        if (src === 'both') {
-          // Email also confirmed this booking — require email cancellation signal too
-          pendingIds.push(row.id);
-        } else {
-          // iCal-only booking — iCal removal is sufficient
-          autoCancelIds.push(row.id);
-        }
-      }
+  if (staleRows.length > 0) {
+    // BUGFIX #3: 30-minute grace period before auto-cancelling.
+    // Booking.com CDN caches iCal feeds for 15-60 min. A new booking may not
+    // appear immediately. Bookings updated within the grace period are NOT
+    // cancelled even if missing from the current feed.
+    const GRACE_PERIOD_MS = 30 * 60 * 1000; // 30 minutes
+    const autoCancelIds: string[] = [];
+    const pendingIds: string[] = [];
 
-      if (autoCancelIds.length > 0) {
-        await d
-          .update(propertyBookings)
-          .set({
-            bookingStatus: "cancelled",
-            cancelledAt: Date.now(),
-            cancellationSource: "ical_removal",
-            hasConflict: false,
-            conflictWith: undefined,
-            updatedAt: new Date(),
-          })
-          .where(inArray(propertyBookings.id, autoCancelIds));
-        (result as AggregationResult & { cancelled?: number }).cancelled =
-          ((result as any).cancelled ?? 0) + autoCancelIds.length;
-      }
+    for (const row of staleRows) {
+      const src = (row as any).dataSource as string | undefined;
+      const timeSinceLastUpdate = Date.now() - (row.updatedAt?.getTime() || 0);
 
-      if (pendingIds.length > 0) {
-        // Mark as pending cancellation — waiting for email confirmation
-        await d
-          .update(propertyBookings)
-          .set({
-            pendingCancellationSource: 'ical',
-            pendingCancellationAt: Date.now(),
-            updatedAt: new Date(),
-          } as any)
-          .where(inArray(propertyBookings.id, pendingIds));
-
-        // Only notify owner for FUTURE bookings — past bookings naturally age out
-        // of the iCal feed (Airbnb removes old events after ~6 months) and should be
-        // silently kept without notification noise.
-        // PERF: Send ONE batched notification per poll cycle (not one per booking) with 6h cooldown.
-        const nowMs = Date.now();
-        const pendingBookings = staleRows.filter(r => pendingIds.includes(r.id));
-        const futureBookings = pendingBookings.filter(b => b.checkOut >= nowMs);
-        if (futureBookings.length > 0) {
-          // PERSISTENT DB-based cooldown that survives serverless cold starts
-          let shouldSend = false;
-          try {
-            const { getDb } = await import('../db.js');
-            const dbInst = await getDb();
-            if (dbInst) {
-              const { notificationSettings } = await import('../../drizzle/schema.js');
-              const { eq: eqOp } = await import('drizzle-orm');
-              const [setting] = await dbInst.select().from(notificationSettings).where(eqOp(notificationSettings.key, 'cancellation_pending')).limit(1);
-              if (setting) {
-                if (!setting.enabled) { shouldSend = false; }
-                else {
-                  const cooldownMs = setting.cooldownHours * 60 * 60 * 1000;
-                  const lastNotified = setting.lastNotifiedAt ?? 0;
-                  if (nowMs - lastNotified > cooldownMs) {
-                    shouldSend = true;
-                    await dbInst.update(notificationSettings).set({ lastNotifiedAt: nowMs }).where(eqOp(notificationSettings.key, 'cancellation_pending'));
-                  }
-                }
-              } else {
-                // No row yet — create one and allow first notification
-                shouldSend = true;
-                await dbInst.insert(notificationSettings).values({
-                  key: 'cancellation_pending',
-                  label: 'Cancellation Pending',
-                  description: 'Notifications when bookings are removed from iCal feed but confirmed by email',
-                  cooldownHours: 6,
-                  enabled: true,
-                  householdId: 'system',
-                  lastNotifiedAt: nowMs,
-                }).onDuplicateKeyUpdate({ set: { lastNotifiedAt: nowMs } });
-              }
-            }
-          } catch { /* suppress on error */ }
-          if (shouldSend) {
-            const { notifyOwner } = await import('../_core/notification.js');
-            const lines = futureBookings.map(b => {
-              const checkIn = new Date(b.checkIn).toISOString().slice(0, 10);
-              const checkOut = new Date(b.checkOut).toISOString().slice(0, 10);
-              return `• "${b.summary || b.id}" (${checkIn}–${checkOut})`;
-            });
-            await notifyOwner({
-              title: `Cancellation pending confirmation (${futureBookings.length} booking${futureBookings.length > 1 ? 's' : ''})`,
-              content: `The following booking(s) were removed from the iCal feed but were also confirmed by email. Please confirm or dismiss in the Properties view:\n\n${lines.join('\n')}`,
-            }).catch(() => {});
-          }
-        }
-        (result as any).pendingCancellations = ((result as any).pendingCancellations ?? 0) + pendingIds.length;
+      if (src === 'both') {
+        // Email also confirmed this booking — require email cancellation signal too
+        pendingIds.push(row.id);
+      } else if (timeSinceLastUpdate < GRACE_PERIOD_MS) {
+        // Within grace period — don't cancel yet (Booking.com CDN cache lag)
+        result.errors.push(
+          `Booking ${row.id.slice(0, 8)} within ${GRACE_PERIOD_MS / 60000}min grace period — not cancelling (updated ${Math.round(timeSinceLastUpdate / 60000)}min ago)`
+        );
+      } else {
+        // Outside grace period — iCal-only booking, safe to auto-cancel
+        autoCancelIds.push(row.id);
       }
     }
-  } else if (parsedEvents.length === 0) {
-    // Edge case: if the feed returns 0 events (e.g., all bookings were cancelled),
-    // mark ALL confirmed bookings for this platform as cancelled.
-    const allConfirmed = await d
-      .select()
-      .from(propertyBookings)
-      .where(
-        and(
-          eq(propertyBookings.platformId, platformId),
-          eq(propertyBookings.bookingStatus, "confirmed"),
-        )
-      );
 
-    if (allConfirmed.length > 0) {
-      const autoCancelAll = allConfirmed.filter((r: any) => r.dataSource !== 'both').map((r: any) => r.id);
-      const pendingAll    = allConfirmed.filter((r: any) => r.dataSource === 'both').map((r: any) => r.id);
+    if (autoCancelIds.length > 0) {
+      await d
+        .update(propertyBookings)
+        .set({
+          bookingStatus: "cancelled",
+          cancelledAt: Date.now(),
+          cancellationSource: "ical_removal",
+          hasConflict: false,
+          conflictWith: undefined,
+          updatedAt: new Date(),
+        })
+        .where(inArray(propertyBookings.id, autoCancelIds));
+      (result as AggregationResult & { cancelled?: number }).cancelled =
+        ((result as any).cancelled ?? 0) + autoCancelIds.length;
+    }
 
-      if (autoCancelAll.length > 0) {
-        await d
-          .update(propertyBookings)
-          .set({
-            bookingStatus: "cancelled",
-            cancelledAt: Date.now(),
-            cancellationSource: "ical_removal",
-            hasConflict: false,
-            conflictWith: undefined,
-            updatedAt: new Date(),
-          })
-          .where(inArray(propertyBookings.id, autoCancelAll));
-        (result as any).cancelled = autoCancelAll.length;
+    if (pendingIds.length > 0) {
+      // Mark as pending cancellation — waiting for email confirmation
+      await d
+        .update(propertyBookings)
+        .set({
+          pendingCancellationSource: 'ical',
+          pendingCancellationAt: Date.now(),
+          updatedAt: new Date(),
+        } as any)
+        .where(inArray(propertyBookings.id, pendingIds));
+
+      // Only notify owner for FUTURE bookings — past bookings naturally age out
+      // of the iCal feed (Airbnb removes old events after ~6 months) and should be
+      // silently kept without notification noise.
+      // PERF: Send ONE batched notification per poll cycle (not one per booking) with 6h cooldown.
+      const nowMs = Date.now();
+      const pendingBookings = staleRows.filter(r => pendingIds.includes(r.id));
+      const futureBookings = pendingBookings.filter(b => b.checkOut >= nowMs);
+      if (futureBookings.length > 0) {
+        // PERSISTENT DB-based cooldown that survives serverless cold starts
+        let shouldSend = false;
+        try {
+          const { getDb } = await import('../db.js');
+          const dbInst = await getDb();
+          if (dbInst) {
+            const { notificationSettings } = await import('../../drizzle/schema.js');
+            const { eq: eqOp } = await import('drizzle-orm');
+            const [setting] = await dbInst.select().from(notificationSettings).where(eqOp(notificationSettings.key, 'cancellation_pending')).limit(1);
+            if (setting) {
+              if (!setting.enabled) { shouldSend = false; }
+              else {
+                const cooldownMs = setting.cooldownHours * 60 * 60 * 1000;
+                const lastNotified = setting.lastNotifiedAt ?? 0;
+                if (nowMs - lastNotified > cooldownMs) {
+                  shouldSend = true;
+                  await dbInst.update(notificationSettings).set({ lastNotifiedAt: nowMs }).where(eqOp(notificationSettings.key, 'cancellation_pending'));
+                }
+              }
+            } else {
+              // No row yet — create one and allow first notification
+              shouldSend = true;
+              await dbInst.insert(notificationSettings).values({
+                key: 'cancellation_pending',
+                label: 'Cancellation Pending',
+                description: 'Notifications when bookings are removed from iCal feed but confirmed by email',
+                cooldownHours: 6,
+                enabled: true,
+                householdId: 'system',
+                lastNotifiedAt: nowMs,
+              }).onDuplicateKeyUpdate({ set: { lastNotifiedAt: nowMs } });
+            }
+          }
+        } catch { /* suppress on error */ }
+        if (shouldSend) {
+          const { notifyOwner } = await import('../_core/notification.js');
+          const lines = futureBookings.map(b => {
+            const checkIn = new Date(b.checkIn).toISOString().slice(0, 10);
+            const checkOut = new Date(b.checkOut).toISOString().slice(0, 10);
+            return `• "${b.summary || b.id}" (${checkIn}–${checkOut})`;
+          });
+          await notifyOwner({
+            title: `Cancellation pending confirmation (${futureBookings.length} booking${futureBookings.length > 1 ? 's' : ''})`,
+            content: `The following booking(s) were removed from the iCal feed but were also confirmed by email. Please confirm or dismiss in the Properties view:\n\n${lines.join('\n')}`,
+          }).catch(() => {});
+        }
       }
-      if (pendingAll.length > 0) {
-        await d
-          .update(propertyBookings)
-          .set({ pendingCancellationSource: 'ical', pendingCancellationAt: Date.now(), updatedAt: new Date() } as any)
-          .where(inArray(propertyBookings.id, pendingAll));
-        (result as any).pendingCancellations = pendingAll.length;
-      }
+      (result as any).pendingCancellations = ((result as any).pendingCancellations ?? 0) + pendingIds.length;
     }
   }
 
