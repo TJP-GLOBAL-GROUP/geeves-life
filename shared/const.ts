@@ -1,31 +1,37 @@
-export { COOKIE_NAME, ONE_YEAR_MS } from "@shared/const";
+export const COOKIE_NAME = "app_session_id";
+export const ONE_YEAR_MS = 1000 * 60 * 60 * 24 * 365;
+export const AXIOS_TIMEOUT_MS = 30_000;
+export const UNAUTHED_ERR_MSG = 'Please login (10001)';
+export const NOT_ADMIN_ERR_MSG = 'You do not have required permission (10002)';
 
-// Generate Manus OAuth login URL at runtime.
-export const getLoginUrl = () => {
-  const oauthPortalUrl = import.meta.env.VITE_OAUTH_PORTAL_URL;
-  const appId = import.meta.env.VITE_APP_ID;
-  const redirectUri = `${window.location.origin}/api/oauth/callback`;
-  const state = btoa(redirectUri);
+// One-time nonce cookie that binds an OAuth login to the browser that started
+// it. The `__Host-` prefix forces the cookie host-only (Secure, Path=/, no
+// Domain), so a sibling *.manus.space site cannot plant a matching value in a
+// victim's browser.
+export const OAUTH_STATE_COOKIE = "__Host-oauth_state";
 
-  const url = new URL(`${oauthPortalUrl}/app-auth`);
-  url.searchParams.set("appId", appId);
-  url.searchParams.set("redirectUri", redirectUri);
-  url.searchParams.set("state", state);
-  url.searchParams.set("type", "signIn");
+// `state` carries the callback redirect URI (used at token exchange) plus the
+// CSRF nonce. Defined here so the client encoder and server decoder never drift.
+export type OAuthState = { redirectUri: string; nonce?: string };
 
-  return url.toString();
-};
+export const encodeOAuthState = (state: OAuthState): string =>
+  btoa(JSON.stringify(state));
 
-// Generate Google OAuth login URL.
-export const getGoogleLoginUrl = (returnPath?: string) => {
-  const origin = window.location.origin;
-  const path = returnPath || "/";
-  return `${origin}/api/auth/google/login?origin=${encodeURIComponent(origin)}&returnPath=${encodeURIComponent(path)}`;
-};
-
-// Generate URL to connect an additional Google account (without replacing the current session).
-export const getGoogleConnectAccountUrl = (returnPath?: string) => {
-  const origin = window.location.origin;
-  const path = returnPath || "/settings?tab=calendars";
-  return `${origin}/api/auth/google/connect-account?origin=${encodeURIComponent(origin)}&returnPath=${encodeURIComponent(path)}`;
+export const decodeOAuthState = (state: string): OAuthState => {
+  let decoded: string;
+  try {
+    decoded = atob(state);
+  } catch {
+    // Malformed base64 (e.g. attacker-supplied garbage). Return no nonce so the
+    // callback's CSRF guard rejects it with 403 — never throw, since the caller
+    // runs outside the request handler's try/catch.
+    return { redirectUri: "" };
+  }
+  try {
+    const parsed = JSON.parse(decoded);
+    if (parsed && typeof parsed.redirectUri === "string") return parsed;
+  } catch {
+    // Legacy links: `state` was a bare base64(redirectUri) with no nonce.
+  }
+  return { redirectUri: decoded };
 };
