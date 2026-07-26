@@ -3,7 +3,7 @@ FROM node:22-slim AS build
 WORKDIR /app
 
 # Enable pnpm via corepack
-RUN corepack enable && corepack prepare pnpm@9 --activate
+RUN corepack enable && corepack prepare pnpm@10.4.1 --activate
 
 # Install dependencies first (cached layer)
 COPY package.json pnpm-lock.yaml ./
@@ -24,7 +24,7 @@ ENV PORT=8080
 
 # Install only production dependencies
 COPY package.json pnpm-lock.yaml ./
-RUN corepack enable && corepack prepare pnpm@9 --activate && \
+RUN corepack enable && corepack prepare pnpm@10.4.1 --activate && \
     pnpm install --frozen-lockfile --prod
 
 # Copy built artifacts from build stage
