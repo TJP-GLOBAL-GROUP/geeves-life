@@ -1,14 +1,14 @@
 // Propagation Retry Queue Heartbeat Handler
 // Endpoint: POST /api/scheduled/propagation-retry
-// Auth:     Manus cron gateway via sdk.authenticateRequest
+// Auth:     x-cron-secret header (SYSTEM_CRON_SECRET) — Google Cloud Scheduler compatible
 // Schedule: Every 2 minutes - cron 6-field: 0 */2 * * * *
 //
 // Drains the propagation_queue table: picks up pending items whose nextRetryAt
 // has passed, re-invokes onEventUpserted with skipRateLimit=true, and marks
 // them resolved or bumps attempts with exponential backoff.
 import type { Request, Response } from "express";
-import { sdk } from "../_core/sdk";
 import { getDb } from "../db";
+import { ENV } from "../_core/env";
 import { propagationQueue } from "../../drizzle/schema";
 import { eq, and, lte } from "drizzle-orm";
 import { onEventUpserted } from "../services/eventPropagation";
@@ -18,18 +18,13 @@ const BATCH_SIZE = 200; // increased from 50 to speed up backfill drain
 export async function propagationRetryHandler(req: Request, res: Response) {
   const startedAt = Date.now();
 
-  // Authenticate via Manus cron gateway. Allow localhost for dev/test.
-  try {
-    const user = await sdk.authenticateRequest(req);
-    if (!user.isCron) {
-      const ip = req.ip ?? "";
-      const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-      if (!isInternal) return res.status(403).json({ error: "cron-only endpoint" });
-    }
-  } catch {
-    const ip = req.ip ?? "";
-    const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-    if (!isInternal) return res.status(401).json({ error: "Unauthorized" });
+  // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
+  // Allow localhost for dev/test without auth.
+  const ip = req.ip ?? "";
+  const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
+  const secret = req.headers["x-cron-secret"];
+  if (!isInternal && secret !== ENV.systemCronSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   const db = await getDb();

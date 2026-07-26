@@ -1,6 +1,6 @@
 // Exchange Rate Daily Fetch Heartbeat Handler
 // Endpoint: POST /api/scheduled/exchange-rate-fetch
-// Auth:     Manus cron gateway via sdk.authenticateRequest (§5c)
+// Auth:     x-cron-secret header (SYSTEM_CRON_SECRET) — Google Cloud Scheduler compatible
 // Schedule: Daily at 06:00 UTC - cron 6-field: 0 0 6 * * *
 // Fetches today's exchange rates for all active currency pairs and stores them
 // in the global exchange_rates table. Also backfills any missing recent dates.
@@ -8,7 +8,7 @@
 
 import type { Request, Response } from "express";
 import { getDb } from "../db";
-import { sdk } from "../_core/sdk";
+import { ENV } from "../_core/env";
 import { sql } from "drizzle-orm";
 
 const API_BASE = "https://cdn.jsdelivr.net/npm/@fawazahmed0/currency-api";
@@ -35,25 +35,13 @@ async function fetchRate(date: string, base: string, target: string): Promise<nu
 export async function exchangeRateFetchHandler(req: Request, res: Response) {
   const startedAt = Date.now();
 
-  // Authenticate via Manus cron gateway
-  let isCronCall = false;
-  try {
-    const user = await sdk.authenticateRequest(req);
-    if (user.isCron) {
-      isCronCall = true;
-    } else {
-      const ip = req.ip ?? "";
-      const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-      if (!isInternal) {
-        return res.status(403).json({ error: "cron-only endpoint" });
-      }
-    }
-  } catch (e: any) {
-    const ip = req.ip ?? "";
-    const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-    if (!isInternal) {
-      return res.status(403).json({ error: "auth-failed", detail: e.message });
-    }
+  // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
+  // Allow localhost for dev/test without auth.
+  const ip = req.ip ?? "";
+  const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
+  const secret = req.headers["x-cron-secret"];
+  if (!isInternal && secret !== ENV.systemCronSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   try {

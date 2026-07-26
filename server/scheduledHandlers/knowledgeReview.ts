@@ -148,32 +148,13 @@ function groupBy<T extends Record<string, unknown>>(arr: T[], key: string): Reco
 // ─── Handler ──────────────────────────────────────────────────────────────────
 export async function knowledgeReviewHandler(req: Request, res: Response) {
   try {
-    // Authenticate via Manus cron gateway (§5c). The platform sends a cron_ session cookie.
-    // Fallback: allow localhost for dev/test.
-    let isCronCall = false;
-    try {
-      const { sdk } = await import("../_core/sdk");
-      const user = await sdk.authenticateRequest(req);
-      if (user.isCron) {
-        isCronCall = true;
-      } else {
-        const ip = req.ip ?? "";
-        const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-        if (!isInternal) {
-          return res.status(403).json({ error: "cron-only endpoint" });
-        }
-        isCronCall = true;
-      }
-    } catch {
-      const ip = req.ip ?? "";
-      const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-      if (!isInternal) {
-        return res.status(403).json({ error: "cron-only endpoint" });
-      }
-      isCronCall = true;
-    }
-    if (!isCronCall) {
-      return res.status(403).json({ error: "cron-only endpoint" });
+    // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
+    // Allow localhost for dev/test without auth.
+    const ip = req.ip ?? "";
+    const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
+    const secret = req.headers["x-cron-secret"];
+    if (!isInternal && secret !== process.env.SYSTEM_CRON_SECRET) {
+      return res.status(401).json({ error: "Unauthorized" });
     }
 
     const db = await getDb();

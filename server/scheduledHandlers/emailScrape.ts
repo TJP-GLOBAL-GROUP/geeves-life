@@ -1,6 +1,6 @@
 // Email Scrape Heartbeat Handler
 // Endpoint: POST /api/scheduled/email-scrape
-// Auth:     Manus cron gateway via sdk.authenticateRequest (§5c)
+// Auth:     x-cron-secret header (SYSTEM_CRON_SECRET) — Google Cloud Scheduler compatible
 // Schedule: Every 6 hours — cron 6-field: 0 0 */6 * * *
 //
 // Scrapes booking confirmation emails from Gmail for all active property platforms
@@ -10,7 +10,7 @@
 
 import type { Request, Response } from "express";
 import { scrapeAllMultiPlatformEmails } from "../services/multiPlatformEmailScraper";
-import { sdk } from "../_core/sdk";
+import { ENV } from "../_core/env";
 import { getDb } from "../db";
 import { emailScrapeJobs } from "../../drizzle/schema";
 import { and, lt, eq } from "drizzle-orm";
@@ -18,32 +18,14 @@ import { and, lt, eq } from "drizzle-orm";
 export async function emailScrapeHandler(req: Request, res: Response) {
   const startedAt = Date.now();
 
-  // Authenticate via Manus cron gateway (§5c).
-  // Fallback: allow localhost for dev/test without auth.
-  let isCronCall = false;
-  try {
-    const user = await sdk.authenticateRequest(req);
-    if (user.isCron) {
-      isCronCall = true;
-    } else {
-      const ip = req.ip ?? "";
-      const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-      if (!isInternal) {
-        return res.status(403).json({ error: "cron-only endpoint" });
-      }
-      isCronCall = true; // dev localhost call
-    }
-  } catch {
-    const ip = req.ip ?? "";
-    const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-    if (!isInternal) {
-      return res.status(403).json({ error: "cron-only endpoint" });
-    }
-    isCronCall = true; // dev localhost call
+  // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
+  // Allow localhost for dev/test without auth.
+  const ip = req.ip ?? "";
+  const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
+  const secret = req.headers["x-cron-secret"];
+  if (!isInternal && secret !== ENV.systemCronSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
-
-  if (!isCronCall) {
-    return res.status(403).json({ error: "cron-only endpoint" });
   }
 
   // DB-03: Stale job sweep — mark any jobs stuck in 'running' for >15 min as failed.

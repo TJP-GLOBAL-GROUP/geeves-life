@@ -18,6 +18,7 @@ import type { Request, Response } from "express";
 import { getDb } from "../db";
 import { oauthTokens } from "../../drizzle/schema";
 import { notifyOwner } from "../_core/notification";
+import { ENV } from "../_core/env";
 
 // Notification cooldown — only send once per 24h even if the check runs every 6h
 let lastHealthNotifyTs = 0;
@@ -34,6 +35,14 @@ const SCOPE_REQUIREMENTS: Record<string, { scope: string; label: string }[]> = {
 };
 
 export async function integrationHealthCheckHandler(req: Request, res: Response) {
+  // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
+  // Allow localhost for dev/test without auth.
+  const ip = req.ip ?? "";
+  const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
+  const secret = req.headers["x-cron-secret"];
+  if (!isInternal && secret !== ENV.systemCronSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
+  }
   try {
     const d = await getDb();
     if (!d) {

@@ -1,6 +1,6 @@
 // iCal Polling Heartbeat Handler
 // Endpoint: POST /api/scheduled/ical-poll
-// Auth:     Manus cron gateway via sdk.authenticateRequest (§5c)
+// Auth:     x-cron-secret header (SYSTEM_CRON_SECRET) — Google Cloud Scheduler compatible
 // Schedule: Every 10 minutes - cron 6-field: 0 */10 * * * *
 // Polls all active iCal platform feeds and upserts bookings into property_bookings.
 // Idempotent - aggregatePlatformICal uses ON DUPLICATE KEY UPDATE internally.
@@ -10,39 +10,19 @@ import { getDb } from "../db";
 import { propertyPlatforms, properties } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { aggregatePlatformICal, generateOutboundICS } from "../services/icalAggregator";
-import { sdk } from "../_core/sdk";
+import { ENV } from "../_core/env";
 
 export async function icalPollHandler(req: Request, res: Response) {
   const startedAt = Date.now();
 
-  // Authenticate via Manus cron gateway (§5c). The platform sends a cron_ session cookie.
-  // Fallback: allow localhost for dev/test without auth.
-  let isCronCall = false;
-  try {
-    const user = await sdk.authenticateRequest(req);
-    if (user.isCron) {
-      isCronCall = true;
-    } else {
-      // Authenticated as a real user — only allow from localhost for dev
-      const ip = req.ip ?? "";
-      const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-      if (!isInternal) {
-        return res.status(403).json({ error: "cron-only endpoint" });
-      }
-      isCronCall = true; // dev localhost call
-    }
-  } catch {
-    // Auth failed — check if it's a localhost dev call
-    const ip = req.ip ?? "";
-    const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-    if (!isInternal) {
-      return res.status(403).json({ error: "cron-only endpoint" });
-    }
-    isCronCall = true; // dev localhost call
+  // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
+  // Allow localhost for dev/test without auth.
+  const ip = req.ip ?? "";
+  const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
+  const secret = req.headers["x-cron-secret"];
+  if (!isInternal && secret !== ENV.systemCronSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
-
-  if (!isCronCall) {
-    return res.status(403).json({ error: "cron-only endpoint" });
   }
 
   try {

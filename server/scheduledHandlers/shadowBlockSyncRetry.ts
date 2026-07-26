@@ -1,6 +1,6 @@
 // Shadow Block Sync Retry Heartbeat Handler
 // Endpoint: POST /api/scheduled/shadow-block-sync-retry
-// Auth:     Manus cron gateway via sdk.authenticateRequest
+// Auth:     x-cron-secret header (SYSTEM_CRON_SECRET) — Google Cloud Scheduler compatible
 // Schedule: Every 2 minutes - cron 6-field: 0 */2 * * * *
 //
 // Picks up shadow_blocks with sync_status='sync_failed' or 'pending_sync' (where
@@ -10,7 +10,6 @@
 // Strategy: Round-robin across target calendars to avoid hammering the same calendar
 // consecutively. This spreads the load and avoids per-calendar rate limits.
 import type { Request, Response } from "express";
-import { sdk } from "../_core/sdk";
 import { getDb } from "../db";
 import { shadowBlocks, calendars } from "../../drizzle/schema";
 import { eq, and, or, lte, isNull, sql } from "drizzle-orm";
@@ -47,23 +46,18 @@ async function createGoogleEvent(accessToken: string, calendarId: string, event:
 export async function shadowBlockSyncRetryHandler(req: Request, res: Response) {
   const startedAt = Date.now();
 
-  // Authenticate via Manus cron gateway. Allow localhost for dev/test.
-  try {
-    // Kill switch
-    if (!ENV.shadowBlockEngineEnabled) {
-      console.log("[ShadowBlockSyncRetry] Engine disabled (SHADOW_BLOCK_ENGINE_ENABLED=false) — skipping");
-      return res.status(200).json({ skipped: true, reason: "shadow_block_engine_disabled" });
-    }
-    const user = await sdk.authenticateRequest(req);
-    if (!user.isCron) {
-      const ip = req.ip ?? "";
-      const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-      if (!isInternal) return res.status(403).json({ error: "cron-only endpoint" });
-    }
-  } catch {
-    const ip = req.ip ?? "";
-    const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-    if (!isInternal) return res.status(401).json({ error: "Unauthorized" });
+  // Kill switch
+  if (!ENV.shadowBlockEngineEnabled) {
+    console.log("[ShadowBlockSyncRetry] Engine disabled (SHADOW_BLOCK_ENGINE_ENABLED=false) — skipping");
+    return res.status(200).json({ skipped: true, reason: "shadow_block_engine_disabled" });
+  }
+  // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
+  // Allow localhost for dev/test without auth.
+  const ip = req.ip ?? "";
+  const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
+  const secret = req.headers["x-cron-secret"];
+  if (!isInternal && secret !== ENV.systemCronSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   const db = await getDb();

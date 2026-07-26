@@ -4,7 +4,6 @@
  * Records results to guardian_audit_log and escalates via email if critical.
  */
 import type { Request, Response } from "express";
-import { sdk } from "../_core/sdk";
 import { getDb } from "../db";
 import { sql } from "drizzle-orm";
 import { ENV } from "../_core/env";
@@ -13,18 +12,13 @@ function isInternalIp(ip: string) {
   return ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
 }
 
-async function authCronRequest(req: Request, res: Response): Promise<boolean> {
-  try {
-    const user = await sdk.authenticateRequest(req);
-    if ((user as any).isCron) return true;
-    if (isInternalIp(req.ip ?? "")) return true;
-    res.status(403).json({ error: "cron-only endpoint" });
-    return false;
-  } catch {
-    if (isInternalIp(req.ip ?? "")) return true;
-    res.status(401).json({ error: "Unauthorized" });
-    return false;
-  }
+function authCronRequest(req: Request, res: Response): boolean {
+  // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
+  // Allow localhost for dev/test without auth.
+  const secret = req.headers["x-cron-secret"];
+  if (isInternalIp(req.ip ?? "") || secret === ENV.systemCronSecret) return true;
+  res.status(401).json({ error: "Unauthorized" });
+  return false;
 }
 
 async function escalateCriticalAlert(results: Record<string, any>) {

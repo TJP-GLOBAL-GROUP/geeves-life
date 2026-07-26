@@ -3,7 +3,6 @@
  * Auto-reconciles recent bookings and flags anomalies (GR-5).
  */
 import type { Request, Response } from "express";
-import { sdk } from "../_core/sdk";
 import { getDb } from "../db";
 import { sql } from "drizzle-orm";
 import { ENV } from "../_core/env";
@@ -13,13 +12,11 @@ function isInternalIp(ip: string) {
 }
 
 export async function guardianFinancialSweepHandler(req: Request, res: Response) {
-  try {
-    const user = await sdk.authenticateRequest(req);
-    if (!(user as any).isCron && !isInternalIp(req.ip ?? "")) {
-      return res.status(403).json({ error: "cron-only endpoint" });
-    }
-  } catch {
-    if (!isInternalIp(req.ip ?? "")) return res.status(401).json({ error: "Unauthorized" });
+  // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
+  // Allow localhost for dev/test without auth.
+  const secret = req.headers["x-cron-secret"];
+  if (!isInternalIp(req.ip ?? "") && secret !== ENV.systemCronSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
 
   if (!ENV.guardianEnabled) return res.json({ status: "disabled", skipped: true });

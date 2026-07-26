@@ -1,6 +1,6 @@
 // Proactive OAuth Token Refresh Heartbeat Handler
 // Endpoint: POST /api/scheduled/token-refresh
-// Auth:     Manus cron gateway via sdk.authenticateRequest
+// Auth:     x-cron-secret header (SYSTEM_CRON_SECRET) — Google Cloud Scheduler compatible
 // Schedule: Every 45 minutes - cron 6-field: 0 */45 * * * *
 //
 // P-25: Proactively refreshes all Google OAuth tokens that will expire within
@@ -16,7 +16,7 @@
 // - Idempotent: safe to run multiple times
 
 import type { Request, Response } from "express";
-import { sdk } from "../_core/sdk";
+import { ENV } from "../_core/env";
 import { getDb } from "../db";
 import { oauthTokens } from "../../drizzle/schema";
 import { and, eq, lt, gt, isNotNull } from "drizzle-orm";
@@ -27,26 +27,14 @@ const REFRESH_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 export async function tokenRefreshHandler(req: Request, res: Response) {
   const startedAt = Date.now();
 
-  // Authenticate via Manus cron gateway. Allow localhost for dev/test.
-  let isCronCall = false;
-  try {
-    const user = await sdk.authenticateRequest(req);
-    if (user.isCron) {
-      isCronCall = true;
-    } else {
-      const ip = req.ip ?? "";
-      const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-      if (!isInternal) return res.status(403).json({ error: "cron-only endpoint" });
-      isCronCall = true;
-    }
-  } catch {
-    const ip = req.ip ?? "";
-    const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-    if (!isInternal) return res.status(403).json({ error: "cron-only endpoint" });
-    isCronCall = true;
+  // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
+  // Allow localhost for dev/test without auth.
+  const ip = req.ip ?? "";
+  const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
+  const secret = req.headers["x-cron-secret"];
+  if (!isInternal && secret !== ENV.systemCronSecret) {
+    return res.status(401).json({ error: "Unauthorized" });
   }
-
-  if (!isCronCall) return res.status(403).json({ error: "cron-only endpoint" });
 
   const db = await getDb();
   if (!db) return res.status(503).json({ error: "DB unavailable" });
