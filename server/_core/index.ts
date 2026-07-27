@@ -3,8 +3,10 @@ import express from "express";
 import { createServer } from "http";
 import net from "net";
 import { createExpressMiddleware } from "@trpc/server/adapters/express";
+import { registerStorageProxy } from "./storageProxy";
 import { appRouter } from "../routers";
 import { createContext } from "./context";
+import { serveStatic, setupVite } from "./vite";
 import { setupGoogleOAuth } from "../auth/googleOAuth";
 import { setupGoogleAccountConnect } from "../auth/googleAccountConnect";
 import { setupRealtime } from "../realtime";
@@ -232,29 +234,33 @@ async function startServer() {
   // tRPC API
   app.use(
     "/api/trpc",
-    createExpressMiddleware({
+registerStorageProxy(app);
+
+      createExpressMiddleware({
       router: appRouter,
       createContext,
     })
   );
   // development mode uses Vite, production mode uses static files
   if (process.env.NODE_ENV === "development") {
-    const { setupVite } = await import("./vite-dev");
     await setupVite(app, server);
   } else {
-    const { serveStatic } = await import("./vite-prod");
     serveStatic(app);
   }
 
-  const preferredPort = parseInt(process.env.PORT || "3000");
-  const port = await findAvailablePort(preferredPort);
+  // Cloud Run fix: in production bind exactly 0.0.0.0:$PORT (no port probing —
+  // the probe race can steal the port from the startup probe or shift us to
+  // 8081, which Cloud Run does not forward to). Dev keeps the probing behavior.
+  const isProd = process.env.NODE_ENV === "production";
+  const preferredPort = parseInt(process.env.PORT || (isProd ? "8080" : "3000"));
+  const port = isProd ? preferredPort : await findAvailablePort(preferredPort);
 
   if (port !== preferredPort) {
     console.log(`Port ${preferredPort} is busy, using port ${port} instead`);
   }
 
-  server.listen(port, () => {
-    console.log(`Server running on http://localhost:${port}/`);
+  server.listen(port, "0.0.0.0", () => {
+    console.log(`Server running on http://0.0.0.0:${port}/`);
     // Register Google Calendar push webhooks for all calendars after server is up
     setTimeout(() => registerAllWebhooks().catch(console.warn), 5000);
   });

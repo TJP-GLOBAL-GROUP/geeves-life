@@ -3,10 +3,16 @@ import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
-import { createServer as createViteServer } from "vite";
-import viteConfig from "../../vite.config";
+
+// NOTE (Cloud Run fix): `vite` and `../../vite.config` are imported DYNAMICALLY
+// inside setupVite. vite.config pulls in devDependencies (e.g.
+// @builder.io/vite-plugin-jsx-loc) which are not installed in the production
+// image — static imports here crashed the container at boot with
+// ERR_MODULE_NOT_FOUND even though production never runs the Vite dev server.
 
 export async function setupVite(app: Express, server: Server) {
+  const { createServer: createViteServer } = await import("vite");
+  const { default: viteConfig } = await import("../../vite.config");
   const serverOptions = {
     middlewareMode: true,
     hmr: { server },
