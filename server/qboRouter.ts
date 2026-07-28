@@ -17,7 +17,7 @@
  */
 
 import { z } from "zod";
-import { router, publicProcedure } from "../trpc";
+import { router, publicProcedure } from "./_core/trpc";
 import { TRPCError } from "@trpc/server";
 import {
   listConnectedRealms,
@@ -26,7 +26,7 @@ import {
   refreshTokensIfNeeded,
   QBO_PURPOSES,
   type QBOPurpose,
-} from "../intuitOAuth";
+} from "./intuitOAuth";
 import {
   syncChartOfAccounts,
   getChartOfAccounts,
@@ -36,8 +36,8 @@ import {
   getProfitAndLoss,
   getBalanceSheet,
   createPurchase,
-} from "../qboApiClient";
-import * as db from "../db";
+} from "./qboApiClient";
+import * as db from "./db";
 
 export const qboRouter = router({
   // ─── Connections ────────────────────────────────────────────────────────────
