@@ -22,10 +22,10 @@
 import type { Express, Request, Response } from "express";
 import { randomBytes } from "crypto";
 import { nanoid } from "nanoid";
-import { registerNonce, verifyAndConsumeNonce } from "./nonceStore";
-import * as db from "../db";
-import { sdk } from "../_core/sdk";
-import { decryptToken } from "../tokenEncryption";
+import { registerNonce, verifyAndConsumeNonce } from "./auth/nonceStore";
+import * as db from "./db";
+import { sdk } from "./sdk";
+import { decryptToken } from "./tokenEncryption";
 
 const INTUIT_AUTH_URL = "https://appcenter.intuit.com/connect/oauth2";
 const INTUIT_TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer";
@@ -150,7 +150,7 @@ export function setupIntuitOAuth(app: Express) {
 export async function getValidAccessToken(realmId: string): Promise<string> {
   const dbInstance = await db.getDb();
   if (!dbInstance) throw new Error("Database not available");
-  const { oauthTokens } = await import("../drizzle/schema");
+  const { oauthTokens } = await import("./drizzle/schema");
   const { and, eq } = await import("drizzle-orm");
   const rows = await dbInstance.select().from(oauthTokens).where(and(eq(oauthTokens.provider, "intuit"), eq(oauthTokens.accountEmail, realmId), eq(oauthTokens.status, "active"))).limit(1);
   if (!rows.length) throw new Error(`No active QBO token for realm ${realmId}`);
@@ -179,7 +179,7 @@ export async function refreshTokensIfNeeded(realmId: string): Promise<{ refreshe
   try {
     const dbInstance = await db.getDb();
     if (!dbInstance) return { refreshed: false };
-    const { oauthTokens } = await import("../drizzle/schema");
+    const { oauthTokens } = await import("./drizzle/schema");
     const { and, eq } = await import("drizzle-orm");
     const rows = await dbInstance.select().from(oauthTokens).where(and(eq(oauthTokens.provider, "intuit"), eq(oauthTokens.accountEmail, realmId), eq(oauthTokens.status, "active"))).limit(1);
     if (!rows.length) return { refreshed: false };
@@ -202,7 +202,7 @@ export async function refreshTokensIfNeeded(realmId: string): Promise<{ refreshe
 export async function disconnectRealm(realmId: string): Promise<void> {
   const dbInstance = await db.getDb();
   if (!dbInstance) return;
-  const { oauthTokens } = await import("../drizzle/schema");
+  const { oauthTokens } = await import("./drizzle/schema");
   const { and, eq } = await import("drizzle-orm");
   const rows = await dbInstance.select().from(oauthTokens).where(and(eq(oauthTokens.provider, "intuit"), eq(oauthTokens.accountEmail, realmId))).limit(1);
   if (!rows.length) return;
@@ -214,7 +214,7 @@ export async function disconnectRealm(realmId: string): Promise<void> {
 export async function listConnectedRealms(householdId: string) {
   const dbInstance = await db.getDb();
   if (!dbInstance) return [];
-  const { oauthTokens } = await import("../drizzle/schema");
+  const { oauthTokens } = await import("./drizzle/schema");
   const { and, eq, desc } = await import("drizzle-orm");
   return dbInstance.select().from(oauthTokens).where(and(eq(oauthTokens.provider, "intuit"), eq(oauthTokens.householdId, householdId))).orderBy(desc(oauthTokens.createdAt));
 }
