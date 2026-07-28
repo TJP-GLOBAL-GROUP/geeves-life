@@ -72,7 +72,7 @@ async function startServer() {
           fontSrc: ["'self'", "https://fonts.gstatic.com"],
           imgSrc: ["'self'", "data:", "blob:", "https:"],
           connectSrc: ["'self'", "wss:", "ws:", "https:"],
-          frameSrc: ["'none'"],
+          frameSrc: ["'self'"],  // allow the /recon explorer iframe (same-origin static asset)
           objectSrc: ["'none'"],
           upgradeInsecureRequests: process.env.NODE_ENV === "production" ? [] : null,
         },
