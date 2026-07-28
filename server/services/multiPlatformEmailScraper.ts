@@ -30,7 +30,7 @@ import {
 } from "../../drizzle/schema";
 import { eq, and, isNotNull, or, desc } from "drizzle-orm";
 import { randomUUID } from "crypto";
-import { invokeLLM } from "../_core/llm";
+import { invokeLLM } from "../../server/_core/vertexAi";
 
 // ─── Types ────────────────────────────────────────────────────────────────────
 

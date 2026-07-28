@@ -4,7 +4,7 @@ import { getDb, writeAuditLog } from "../db";
 import { invoiceExtractions, bankAccounts, expenses } from "../../drizzle/schema";
 import { eq, and } from "drizzle-orm";
 import { storagePut } from "../storage";
-import { invokeLLM } from "../_core/llm";
+import { invokeLLM } from "../../server/_core/vertexAi";
 import { nanoid } from "nanoid";
 import { sql } from "drizzle-orm";
 import { TRPCError } from "@trpc/server";

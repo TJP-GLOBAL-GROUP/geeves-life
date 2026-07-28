@@ -17,7 +17,7 @@
 import type { Request, Response } from "express";
 import { getDb } from "../db";
 import { oauthTokens } from "../../drizzle/schema";
-import { notifyOwner } from "../_core/notification";
+import { notifyOwner } from "../../server/_core/cloudNotification";
 import { ENV } from "../_core/env";
 
 // Notification cooldown — only send once per 24h even if the check runs every 6h

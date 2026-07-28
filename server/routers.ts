@@ -5,7 +5,7 @@ import { publicProcedure, protectedProcedure, router } from "./_core/trpc";
 import { z } from "zod";
 import * as db from "./db";
 import { writeAuditLog } from "./db";
-import { invokeLLM } from "./_core/llm";
+import { invokeLLM } from "./_core/vertexAi";
 import { storagePut } from "./storage";
 import { nanoid } from "nanoid";
 import { householdRouter } from "./routers/household";

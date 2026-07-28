@@ -11,6 +11,9 @@ export const ENV = {
   systemCronSecret: process.env.SYSTEM_CRON_SECRET ?? "",
   gcsBucketName: process.env.GCS_BUCKET_NAME ?? "",
   googleCredentialsJson: process.env.GOOGLE_APPLICATION_CREDENTIALS_JSON ?? "",
+  // Google Cloud Platform
+  gcpProjectId: process.env.GCP_PROJECT_ID ?? "",
+  gcpRegion: process.env.GCP_REGION ?? "us-central1",
   shadowBlockEngineEnabled: process.env.SHADOW_BLOCK_ENGINE_ENABLED !== "false",
   enableWebhookTokenCheck: process.env.ENABLE_WEBHOOK_TOKEN_CHECK === "true",
   guardianEnabled: process.env.GUARDIAN_ENABLED !== "false",
