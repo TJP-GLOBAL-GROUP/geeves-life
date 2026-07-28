@@ -10,15 +10,14 @@ COPY . .
 # vite build (client) + esbuild server/_core/index.ts --packages=external (server)
 # Externalized imports resolve at RUNTIME — so the final image needs prod node_modules.
 RUN pnpm build
+# Prune devDependencies in-place so we can copy the trimmed node_modules to runtime.
+RUN pnpm prune --prod
 
-# Runtime stage: production deps only (vite/@builder.io are dev-only and now
-# dynamically imported, so they are not needed here).
+# Runtime stage: copy pruned node_modules from build stage (avoids lockfile mismatch
+# and ensures all production packages including @google-cloud/* are present).
 FROM node:22-slim
 WORKDIR /app
-RUN corepack enable && corepack prepare pnpm@9 --activate
-COPY package.json pnpm-lock.yaml ./
-COPY patches ./patches
-RUN pnpm install --prod --frozen-lockfile || pnpm install --prod
+COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 ENV NODE_ENV=production
 # Cloud Run injects PORT (default 8080); server binds 0.0.0.0:$PORT.
