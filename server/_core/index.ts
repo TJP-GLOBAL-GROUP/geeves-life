@@ -125,6 +125,12 @@ async function startServer() {
   // Configure body parser — 10 MB for regular JSON, 50 MB for file upload endpoints
   app.use(express.json({ limit: "10mb" }));
   app.use(express.urlencoded({ limit: "10mb", extended: true }));
+
+  // ── Health check endpoint (used by GitHub Actions smoke test + Cloud Run) ──
+  app.get("/api/health", (_req, res) => {
+    res.status(200).json({ status: "ok", timestamp: new Date().toISOString() });
+  });
+
   // Google OAuth routes (skips if credentials not configured)
   setupGoogleOAuth(app);
   // Google account connect routes (add additional Google accounts to existing session)
@@ -250,6 +256,14 @@ async function startServer() {
   } else {
     serveStatic(app);
   }
+
+  // ── Global error handler ───────────────────────────────────────────────
+  // Must be the LAST middleware. Catches any uncaught errors from above.
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  app.use((err: any, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+    console.error("[Express Error]", err?.message || err, err?.stack);
+    res.status(500).json({ error: "Internal server error", message: err?.message });
+  });
 
   // Cloud Run fix: in production bind exactly 0.0.0.0:$PORT (no port probing —
   // the probe race can steal the port from the startup probe or shift us to
