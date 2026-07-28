@@ -9,7 +9,7 @@
 
 import { z } from "zod";
 import { router, protectedProcedure } from "../_core/trpc";
-import { invokeLLM, type Tool, type Message, type ToolCall } from "../../server/_core/vertexAi";
+import { invokeLLM, type Tool, type Message, type ToolCall } from "../_core/vertexAi";
 import * as db from "../db";
 import { nanoid } from "nanoid";
 import { hasPermission, getCalendarVisibilityTier, canSeeVertical } from "./rbac";

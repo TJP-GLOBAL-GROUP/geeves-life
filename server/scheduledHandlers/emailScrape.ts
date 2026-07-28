@@ -26,7 +26,6 @@ export async function emailScrapeHandler(req: Request, res: Response) {
   if (!isInternal && secret !== ENV.systemCronSecret) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  }
 
   // DB-03: Stale job sweep — mark any jobs stuck in 'running' for >15 min as failed.
   // Prevents the dashboard from showing perpetual "running" states after a server

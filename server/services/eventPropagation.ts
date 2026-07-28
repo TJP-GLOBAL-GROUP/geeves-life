@@ -40,7 +40,7 @@ import {
   deleteGoogleEvent,
 } from "./googleCalendarSync";
 import { getAccessTokenForCalendar } from "./calendarWebhook";
-import { notifyOwner } from "../../server/_core/cloudNotification";
+import { notifyOwner } from "../_core/cloudNotification";
 import { ENV } from "../_core/env";
 
 // ─── Propagation Retry Queue ────────────────────────────────────────────────

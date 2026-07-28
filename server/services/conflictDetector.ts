@@ -12,7 +12,7 @@
 import { getDb } from "../db";
 import { propertyBookings, propertyPlatforms, bookingOverrides } from "../../drizzle/schema";
 import { eq, and, gt, inArray } from "drizzle-orm";
-import { notifyOwner } from "../../server/_core/cloudNotification";
+import { notifyOwner } from "../_core/cloudNotification";
 
 export interface ConflictEntry {
   bookingAId: string;

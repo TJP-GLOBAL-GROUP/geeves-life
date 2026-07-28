@@ -22,7 +22,7 @@ import {
 } from "./googleCalendarSync";
 import { emitSyncStatus, emitCalendarEvent } from "../realtime";
 import { onEventUpserted, onEventDeleted } from "./eventPropagation";
-import { notifyOwner } from "../../server/_core/cloudNotification";
+import { notifyOwner } from "../_core/cloudNotification";
 import { ENV } from "../_core/env";
 
 /**

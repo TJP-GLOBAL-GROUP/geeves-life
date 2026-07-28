@@ -23,7 +23,6 @@ export async function icalPollHandler(req: Request, res: Response) {
   if (!isInternal && secret !== ENV.systemCronSecret) {
     return res.status(401).json({ error: "Unauthorized" });
   }
-  }
 
   try {
     const db = await getDb();

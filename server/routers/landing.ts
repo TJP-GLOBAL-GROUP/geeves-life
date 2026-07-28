@@ -11,7 +11,7 @@ import { TRPCError } from "@trpc/server";
 import { getDb } from "../db";
 import { betaSignups, contactMessages } from "../../drizzle/schema";
 import { eq, desc, and } from "drizzle-orm";
-import { notifyOwner } from "../../server/_core/cloudNotification";
+import { notifyOwner } from "../_core/cloudNotification";
 
 // ─── Helpers ──────────────────────────────────────────────────────────────────
 
