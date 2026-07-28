@@ -4,7 +4,6 @@ FROM node:22-slim AS build
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9 --activate
 COPY package.json pnpm-lock.yaml ./
-COPY patches ./patches
 RUN pnpm install --frozen-lockfile || pnpm install
 COPY . .
 # vite build (client) + esbuild server/_core/index.ts --packages=external (server)
