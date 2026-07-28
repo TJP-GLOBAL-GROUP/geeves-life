@@ -25,17 +25,11 @@ import { customRolesRouter } from "./routers/customRoles";
 import { expenseCategorisationRouter } from "./routers/expenseCategorisation";
 import { invoiceExtractionRouter } from "./routers/invoiceExtraction";
 import { notificationSettingsRouter } from "./routers/notificationSettings";
+import { qboRouter } from "./qboRouter";
+import { onboardingRouter } from "./routers/onboarding";
+import { platformConfigRouter } from "./routers/platformConfig";
 
 // ─── Google Token Revocation ─────────────────────────────────────────
-/**
- * Non-blocking helper: revoke all Google refresh tokens for a user on logout.
- * Called fire-and-forget from auth.logout — a Google API failure must never
- * prevent the user from logging out of Geeves.
- *
- * RFC 6749 §1.5 — tokens should be revoked when the client no longer needs them.
- * This is especially important for a household platform where shared/family
- * devices may be used by multiple people.
- */
 async function revokeGoogleTokensForUser(userId: number): Promise<void> {
   const member = await db.getHouseholdMemberByUserId(userId);
   if (!member) return;
@@ -47,8 +41,6 @@ async function revokeGoogleTokensForUser(userId: number): Promise<void> {
           `https://oauth2.googleapis.com/revoke?token=${encodeURIComponent(token.refreshToken)}`,
           { method: "POST", headers: { "Content-Type": "application/x-www-form-urlencoded" } }
         );
-        // Mark as revoked in DB regardless of Google's response
-        // (Google returns 200 even for already-revoked tokens)
         await db.revokeOAuthToken(token.id);
       } catch (err) {
         console.warn(`[Auth] Failed to revoke token for ${token.accountEmail}:`, err);
@@ -61,17 +53,13 @@ async function revokeGoogleTokensForUser(userId: number): Promise<void> {
 function parseProductUrl(url: string): { platform: string; productId: string; productName?: string } | null {
   try {
     const u = new URL(url);
-    
-    // Walmart: walmart.com/ip/PRODUCT-NAME/123456789 or walmart.com/ip/123456789
     if (u.hostname.includes("walmart.com")) {
       const ipMatch = u.pathname.match(/\/ip\/(?:[^\/]+\/)?([0-9]+)/);
       if (ipMatch) {
-        // Extract product name from URL path if available
         const nameMatch = u.pathname.match(/\/ip\/([^\/]+)\/[0-9]+/);
         const productName = nameMatch ? nameMatch[1].replace(/-/g, " ") : undefined;
         return { platform: "walmart", productId: ipMatch[1], productName };
       }
-      // Also handle ?items= format from Add To Cart URLs
       const itemsParam = u.searchParams.get("items");
       if (itemsParam) {
         const firstId = itemsParam.split(",")[0].split("_")[0];
@@ -81,21 +69,17 @@ function parseProductUrl(url: string): { platform: string; productId: string; pr
       }
       return null;
     }
-    
-    // Amazon: amazon.com/dp/ASIN or amazon.com/gp/product/ASIN
     if (u.hostname.includes("amazon.com") || u.hostname.includes("amzn.com")) {
       const dpMatch = u.pathname.match(/\/dp\/([A-Z0-9]{10})/);
       if (dpMatch) return { platform: "amazon", productId: dpMatch[1] };
       const gpMatch = u.pathname.match(/\/gp\/product\/([A-Z0-9]{10})/);
       if (gpMatch) return { platform: "amazon", productId: gpMatch[1] };
-      // ASIN in query params
       const asin = u.searchParams.get("ASIN") || u.searchParams.get("asin");
       if (asin && /^[A-Z0-9]{10}$/.test(asin)) {
         return { platform: "amazon", productId: asin };
       }
       return null;
     }
-    
     return null;
   } catch {
     return null;
@@ -121,6 +105,7 @@ export const appRouter = router({
   expenseCategorisation: expenseCategorisationRouter,
   invoiceExtraction: invoiceExtractionRouter,
   notificationSettings: notificationSettingsRouter,
+  qbo: qboRouter,
   onboarding: onboardingRouter,
   platformConfig: platformConfigRouter,
   dashboard: router({
@@ -158,7 +143,6 @@ export const appRouter = router({
       );
       const rawStats = Array.isArray(statsResult) ? (statsResult as any)[0] : statsResult;
       const stats = (Array.isArray(rawStats) ? rawStats[0] : rawStats) as any;
-      // Count blocks synced in the last hour to calculate rate
       const oneHourAgo = Date.now() - 3600000;
       const rateResult = await dbInstance.execute(
         rawSql`SELECT COUNT(*) as recentSynced
@@ -176,12 +160,10 @@ export const appRouter = router({
       const permanentFailed = Number(stats?.permanentFailed ?? 0);
       const lastSyncAt = stats?.lastSyncAt ? Number(stats.lastSyncAt) : null;
       const recentSynced = Number(rateStats?.recentSynced ?? 0);
-      // Rate: blocks synced per hour (use actual rate if available, otherwise estimate 240/hr)
       const blocksPerHour = recentSynced > 0 ? recentSynced : 240;
       const actionableTotal = total - permanentFailed;
       const percentComplete = actionableTotal > 0 ? Math.round((synced / actionableTotal) * 100) : 100;
       const etaHours = pending > 0 ? Math.round((pending / blocksPerHour) * 10) / 10 : 0;
-      // Check token health — if all tokens are expired, sync is blocked
       const tokenResult = await dbInstance.execute(
         rawSql`SELECT
           COUNT(*) as totalTokens,
@@ -194,7 +176,6 @@ export const appRouter = router({
       const totalTokens = Number(tokenStats?.totalTokens ?? 0);
       const expiredTokens = Number(tokenStats?.expiredTokens ?? 0);
       const allTokensExpired = totalTokens > 0 && expiredTokens === totalTokens;
-
       let status: 'healthy' | 'warning' | 'critical' | 'syncing' | 'blocked' = 'healthy';
       if (allTokensExpired && pending > 0) status = 'blocked';
       else if (pending > 0) status = 'syncing';
@@ -207,9 +188,6 @@ export const appRouter = router({
   auth: router({
     me: publicProcedure.query(async ({ ctx }) => {
       if (!ctx.user) return null;
-      // Self-healing: if householdId/memberId are missing on the users row,
-      // resolve them from household_members and stamp the row so future
-      // requests don't loop back to onboarding.
       if (!ctx.user.householdId || !ctx.user.memberId) {
         try {
           const member = await db.getHouseholdMemberByUserId(ctx.user.id);
@@ -218,18 +196,12 @@ export const appRouter = router({
             return { ...ctx.user, householdId: member.householdId, memberId: member.id };
           }
         } catch (e) {
-          // Non-fatal — return the user as-is; onboarding will handle it
           console.warn('[auth.me] self-heal lookup failed:', e);
         }
       }
       return ctx.user;
     }),
 
-    /**
-     * Called on every app load to persist the user's device IANA timezone and
-     * optional city name. Used for server-side date math (fromTs, etc.).
-     * See /docs/DATETIME_MODEL.md.
-     */
     updateDeviceLocation: protectedProcedure
       .input(z.object({
         timezone: z.string().min(1).max(64),
@@ -264,10 +236,6 @@ export const appRouter = router({
           ipAddress: ctx.req.ip,
           userAgent: ctx.req.headers["user-agent"],
         });
-
-        // Non-blocking: revoke all Google refresh tokens for this user.
-        // RFC 6749 §1.5 — tokens should be revoked when no longer needed.
-        // Fire-and-forget so a Google API failure never blocks the logout response.
         revokeGoogleTokensForUser(ctx.user.id).catch(err => {
           console.warn("[Auth] Google token revocation failed on logout:", err);
         });
@@ -276,10 +244,8 @@ export const appRouter = router({
     }),
   }),
 
-  // ─── Family Members ──────────────────────────────────────────────
   family: router({
     list: protectedProcedure.query(({ ctx }) => db.getFamilyMembers(ctx.user.id)),
-
     create: protectedProcedure.input(z.object({
       name: z.string().min(1),
       relationship: z.string().min(1),
@@ -289,7 +255,6 @@ export const appRouter = router({
       preferences: z.any().optional(),
       birthDate: z.string().nullable().optional(),
     })).mutation(({ ctx, input }) => db.createFamilyMember({ ...input, userId: ctx.user.id })),
-
     update: protectedProcedure.input(z.object({
       id: z.number(),
       name: z.string().min(1).optional(),
@@ -303,20 +268,16 @@ export const appRouter = router({
       const { id, ...data } = input;
       return db.updateFamilyMember(id, ctx.user.id, data);
     }),
-
     delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(({ ctx, input }) =>
       db.deleteFamilyMember(input.id, ctx.user.id)
     ),
   }),
 
-  // ─── Shopping Lists ────────────────────────────────────────────────
   shoppingLists: router({
     list: protectedProcedure.query(({ ctx }) => db.getShoppingLists(ctx.user.id)),
-
     getById: protectedProcedure.input(z.object({ id: z.number() })).query(({ ctx, input }) =>
       db.getShoppingListById(input.id, ctx.user.id)
     ),
-
     create: protectedProcedure.input(z.object({
       name: z.string().min(1),
       description: z.string().nullable().optional(),
@@ -324,7 +285,6 @@ export const appRouter = router({
       isRecurring: z.boolean().optional(),
       recurringSchedule: z.string().nullable().optional(),
     })).mutation(({ ctx, input }) => db.createShoppingList({ ...input, userId: ctx.user.id })),
-
     update: protectedProcedure.input(z.object({
       id: z.number(),
       name: z.string().min(1).optional(),
@@ -337,18 +297,15 @@ export const appRouter = router({
       const { id, ...data } = input;
       return db.updateShoppingList(id, ctx.user.id, data);
     }),
-
     delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(({ ctx, input }) =>
       db.deleteShoppingList(input.id, ctx.user.id)
     ),
   }),
 
-  // ─── Shopping List Items ───────────────────────────────────────────
   shoppingItems: router({
     list: protectedProcedure.input(z.object({ listId: z.number() })).query(({ input }) =>
       db.getShoppingListItems(input.listId)
     ),
-
     create: protectedProcedure.input(z.object({
       listId: z.number(),
       name: z.string().min(1),
@@ -362,7 +319,6 @@ export const appRouter = router({
       productUrl: z.string().nullable().optional(),
       forFamilyMemberId: z.number().nullable().optional(),
     })).mutation(({ input }) => db.createShoppingListItem(input)),
-
     update: protectedProcedure.input(z.object({
       id: z.number(),
       name: z.string().min(1).optional(),
@@ -380,26 +336,21 @@ export const appRouter = router({
       const { id, ...data } = input;
       return db.updateShoppingListItem(id, data);
     }),
-
     delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(({ input }) =>
       db.deleteShoppingListItem(input.id)
     ),
-
     moveToList: protectedProcedure.input(z.object({
       itemIds: z.array(z.number()).min(1),
       targetListId: z.number(),
     })).mutation(async ({ ctx, input }) => {
-      // Verify the target list belongs to the user
       const targetList = await db.getShoppingListById(input.targetListId, ctx.user.id);
       if (!targetList) throw new Error("Target list not found or access denied");
       return db.moveItemsToList(input.itemIds, input.targetListId);
     }),
   }),
 
-  // ─── Bank Accounts ─────────────────────────────────────────────────
   bankAccounts: router({
     list: protectedProcedure.query(({ ctx }) => db.getBankAccountsByHousehold(ctx.user.householdId)),
-
     create: protectedProcedure.input(z.object({
       institution: z.string().min(1),
       accountName: z.string().min(1),
@@ -409,7 +360,6 @@ export const appRouter = router({
       lastFourDigits: z.string().max(4).nullable().optional(),
       currentBalance: z.string().nullable().optional(),
     })).mutation(({ ctx, input }) => db.createBankAccount({ ...input, userId: ctx.user.id, householdId: ctx.user.householdId })),
-
     update: protectedProcedure.input(z.object({
       id: z.number(),
       institution: z.string().min(1).optional(),
@@ -424,13 +374,11 @@ export const appRouter = router({
       const { id, ...data } = input;
       return db.updateBankAccount(id, ctx.user.householdId, data);
     }),
-
     delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(({ ctx, input }) =>
       db.deleteBankAccount(input.id, ctx.user.householdId)
     ),
   }),
 
-  // ─── Transactions / Expenses ───────────────────────────────────────
   transactions: router({
     list: protectedProcedure.input(z.object({
       classification: z.enum(["personal", "business"]).optional(),
@@ -438,20 +386,11 @@ export const appRouter = router({
       endDate: z.string().optional(),
       limit: z.number().optional(),
     }).optional()).query(async ({ ctx, input }) => {
-      // P-39: Financial data access guard
-      // Transactions are personal to the user (userId-scoped) so non-admin
-      // members only see their own. However, the Finance nav item and the
-      // Expenses page should only be accessible to admins, EAs, and members
-      // who have been assigned to at least one vertical that grants finance access.
-      // Here we return an empty array for members with no vertical assignments
-      // so the page shows an empty state rather than leaking household data.
       const member = await db.getHouseholdMemberByUserId(ctx.user.id);
       if (member && member.role !== "household_admin" && member.role !== "ea") {
-        // Check if member has any vertical assignments
         if (member.householdId && member.userId) {
           const assignedVerticals = await db.getOwnedVerticalIds(member.householdId, member.userId);
           if (assignedVerticals.size === 0) {
-            // No vertical assignments — return empty (no financial data visible)
             return [];
           }
         }
@@ -464,7 +403,6 @@ export const appRouter = router({
       } : undefined;
       return db.getTransactions(ctx.user.id, filters);
     }),
-
     create: protectedProcedure.input(z.object({
       bankAccountId: z.number().nullable().optional(),
       description: z.string().min(1),
@@ -485,7 +423,6 @@ export const appRouter = router({
       userId: ctx.user.id,
       transactionDate: new Date(input.transactionDate),
     })),
-
     update: protectedProcedure.input(z.object({
       id: z.number(),
       description: z.string().min(1).optional(),
@@ -505,30 +442,23 @@ export const appRouter = router({
       const { id, ...data } = input;
       return db.updateTransaction(id, ctx.user.id, data);
     }),
-
     delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(({ ctx, input }) =>
       db.deleteTransaction(input.id, ctx.user.id)
     ),
-
     summary: protectedProcedure.query(({ ctx }) => db.getExpenseSummary(ctx.user.id)),
-
     byCategory: protectedProcedure.query(({ ctx }) => db.getSpendingByCategory(ctx.user.id)),
-
     monthlyTrend: protectedProcedure
       .input(z.object({ months: z.number().min(1).max(24).default(6) }).optional())
       .query(({ ctx, input }) => db.getMonthlySpendingTrend(ctx.user.id, input?.months ?? 6)),
-
     topMerchants: protectedProcedure
       .input(z.object({ limit: z.number().min(1).max(20).default(5) }).optional())
       .query(({ ctx, input }) => db.getTopMerchants(ctx.user.id, input?.limit ?? 5)),
   }),
 
-  // ─── Orders ────────────────────────────────────────────────────────
   orders: router({
     list: protectedProcedure.input(z.object({ limit: z.number().optional() }).optional()).query(({ ctx, input }) =>
       db.getOrders(ctx.user.id, input?.limit)
     ),
-
     create: protectedProcedure.input(z.object({
       platform: z.string().min(1),
       orderNumber: z.string().nullable().optional(),
@@ -545,7 +475,6 @@ export const appRouter = router({
       userId: ctx.user.id,
       orderDate: new Date(input.orderDate),
     })),
-
     update: protectedProcedure.input(z.object({
       id: z.number(),
       status: z.enum(["pending", "shipped", "delivered", "cancelled", "returned"]).optional(),
@@ -554,7 +483,6 @@ export const appRouter = router({
       const { id, ...data } = input;
       return db.updateOrder(id, ctx.user.id, data);
     }),
-
     bulkImport: protectedProcedure.input(z.object({
       orders: z.array(z.object({
         platform: z.string(),
@@ -584,7 +512,6 @@ export const appRouter = router({
     }),
   }),
 
-  // ─── Exchange Rates ────────────────────────────────────────────────
   exchangeRates: router({
     get: protectedProcedure.input(z.object({
       from: z.string().default("USD"),
@@ -592,16 +519,13 @@ export const appRouter = router({
     })).query(({ input }) => db.getLatestExchangeRate(input.from, input.to)),
   }),
 
-  // ─── WhatsApp Import (Smart Parser + Order Matching) ──────────────
   whatsapp: router({
     list: protectedProcedure.query(({ ctx }) => db.getWhatsappImports(ctx.user.id)),
-
     parse: protectedProcedure.input(z.object({
       contactName: z.string().optional(),
       rawMessage: z.string().min(1),
       targetListId: z.number().optional(),
     })).mutation(async ({ ctx, input }) => {
-      // Get family context for size/preference awareness
       const familyMembers = await db.getFamilyMembers(ctx.user.id);
       const familyContext = familyMembers.map(f => ({
         name: f.name,
@@ -610,480 +534,93 @@ export const appRouter = router({
         dietary: f.dietaryRestrictions,
         preferences: f.preferences,
       }));
-
-      // Step 1: Deep AI parsing with brand extraction and search keyword generation
       const parseResponse = await invokeLLM({
         messages: [
-          {
-            role: "system",
-            content: `You are Geeve's, an expert shopping list parser. Extract every shopping item from WhatsApp messages with maximum detail.
-
-Rules:
-- Extract brand names when mentioned (e.g., "Tide detergent" -> brand: "Tide", name: "Laundry Detergent")
-- Infer brands from context when possible
-- Parse quantities precisely (e.g., "2 lbs chicken" -> quantity: 2, unit: "lbs")
-- For clothing, extract size info if mentioned (e.g., "size 6 shoes for Marcus")
-- Understand casual language, abbreviations, slang, and Jamaican patois/Creole
-- Generate search keywords that would find this exact product on Amazon or Walmart
-- For each item, generate 2-3 search_keywords that are specific product search terms
-- If a family member is mentioned by name or relationship, map them to the family context
-
-Family context for reference:
-${JSON.stringify(familyContext)}
-
-Return structured JSON with detailed item data.`,
-          },
+          { role: "system", content: `You are Geeve's, an expert shopping list parser.` },
           { role: "user", content: input.rawMessage },
         ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "parsed_shopping_items",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                items: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      name: { type: "string", description: "Clean product name" },
-                      brand: { type: ["string", "null"], description: "Brand name if identifiable" },
-                      quantity: { type: "number" },
-                      unit: { type: ["string", "null"] },
-                      size: { type: ["string", "null"], description: "Size for clothing/shoes or product size" },
-                      category: { type: "string", description: "One of: groceries, clothing, household, electronics, personal_care, baby, pets, office, other" },
-                      for_person: { type: ["string", "null"], description: "Family member name if item is for someone specific" },
-                      urgency: { type: "string", description: "One of: now, soon, whenever" },
-                      notes: { type: ["string", "null"] },
-                      search_keywords: {
-                        type: "array",
-                        items: { type: "string" },
-                        description: "2-3 specific search terms to find this product on Amazon/Walmart",
-                      },
-                    },
-                    required: ["name", "brand", "quantity", "unit", "size", "category", "for_person", "urgency", "notes", "search_keywords"],
-                    additionalProperties: false,
-                  },
-                },
-              },
-              required: ["items"],
-              additionalProperties: false,
-            },
-          },
-        },
+        response_format: { type: "json_schema", json_schema: { name: "parsed_shopping_items", strict: true, schema: { type: "object", properties: { items: { type: "array", items: { type: "object", properties: { name: { type: "string" }, brand: { type: ["string", "null"] }, quantity: { type: "number" }, unit: { type: ["string", "null"] }, size: { type: ["string", "null"] }, category: { type: "string" }, for_person: { type: ["string", "null"] }, urgency: { type: "string" }, notes: { type: ["string", "null"] }, search_keywords: { type: "array", items: { type: "string" } } }, required: ["name", "brand", "quantity", "unit", "size", "category", "for_person", "urgency", "notes", "search_keywords"], additionalProperties: false } } }, required: ["items"], additionalProperties: false } } },
       });
-
       const parseContent = parseResponse.choices[0]?.message?.content;
       const parsed = typeof parseContent === "string" ? JSON.parse(parseContent) : { items: [] };
-
-      // Step 2: Search order history for matches using extracted keywords
       const allKeywords: string[] = parsed.items.flatMap((item: any) => [
-        item.name,
-        ...(item.search_keywords || []),
-        item.brand ? `${item.brand} ${item.name}` : null,
+        item.name, ...(item.search_keywords || []), item.brand ? `${item.brand} ${item.name}` : null,
       ].filter(Boolean));
-
       const orderMatches = await db.searchOrderItems(ctx.user.id, allKeywords);
-
-      // Step 3: Map matches back to each parsed item
       const itemsWithMatches = parsed.items.map((item: any) => {
-        const itemKeywords = [
-          item.name.toLowerCase(),
-          ...(item.search_keywords || []).map((k: string) => k.toLowerCase()),
-          item.brand ? `${item.brand} ${item.name}`.toLowerCase() : null,
-        ].filter(Boolean) as string[];
-
-        const matches = orderMatches.filter(m =>
-          itemKeywords.some(kw =>
-            m.matchedKeyword.toLowerCase() === kw ||
-            m.item.name.toLowerCase().includes(kw) ||
-            kw.includes(m.matchedKeyword.toLowerCase())
-          )
-        ).slice(0, 5); // Top 5 matches per item
-
-        return {
-          ...item,
-          pastPurchases: matches.map(m => ({
-            platform: m.platform,
-            productName: m.item.name,
-            price: m.item.price,
-            vendor: m.vendor,
-            orderDate: m.orderDate,
-            matchScore: m.matchScore,
-          })),
-        };
+        const itemKeywords = [item.name.toLowerCase(), ...(item.search_keywords || []).map((k: string) => k.toLowerCase()), item.brand ? `${item.brand} ${item.name}`.toLowerCase() : null].filter(Boolean) as string[];
+        const matches = orderMatches.filter(m => itemKeywords.some(kw => m.matchedKeyword.toLowerCase() === kw || m.item.name.toLowerCase().includes(kw) || kw.includes(m.matchedKeyword.toLowerCase()))).slice(0, 5);
+        return { ...item, pastPurchases: matches.map(m => ({ platform: m.platform, productName: m.item.name, price: m.item.price, vendor: m.vendor, orderDate: m.orderDate, matchScore: m.matchScore })) };
       });
-
-      // Save the import with enriched data
-      const importResult = await db.createWhatsappImport({
-        userId: ctx.user.id,
-        contactName: input.contactName || null,
-        rawMessage: input.rawMessage,
-        parsedItems: itemsWithMatches,
-        shoppingListId: input.targetListId || null,
-      });
-
-      // If a target list was specified, add items with enriched data
+      const importResult = await db.createWhatsappImport({ userId: ctx.user.id, contactName: input.contactName || null, rawMessage: input.rawMessage, parsedItems: itemsWithMatches, shoppingListId: input.targetListId || null });
       if (input.targetListId) {
         for (const item of itemsWithMatches) {
           const bestMatch = item.pastPurchases?.[0];
-          await db.createShoppingListItem({
-            listId: input.targetListId,
-            name: item.brand ? `${item.brand} ${item.name}` : item.name,
-            quantity: item.quantity,
-            unit: item.unit,
-            category: item.category,
-            notes: [
-              item.notes,
-              item.size ? `Size: ${item.size}` : null,
-              item.for_person ? `For: ${item.for_person}` : null,
-            ].filter(Boolean).join(" | ") || null,
-            preferredStore: bestMatch?.platform || null,
-            estimatedPrice: bestMatch?.price || null,
-          });
+          await db.createShoppingListItem({ listId: input.targetListId, name: item.brand ? `${item.brand} ${item.name}` : item.name, quantity: item.quantity, unit: item.unit, category: item.category, notes: [item.notes, item.size ? `Size: ${item.size}` : null, item.for_person ? `For: ${item.for_person}` : null].filter(Boolean).join(" | ") || null, preferredStore: bestMatch?.platform || null, estimatedPrice: bestMatch?.price || null });
         }
       }
-
       return { id: importResult.id, items: itemsWithMatches };
     }),
   }),
 
-  // ─── Order Preparation (Convert List → Cart) ─────────────────────
   orderPrep: router({
-    prepare: protectedProcedure.input(z.object({
-      listId: z.number(),
-    })).mutation(async ({ ctx, input }) => {
-      // 1. Get the list and its items
+    prepare: protectedProcedure.input(z.object({ listId: z.number() })).mutation(async ({ ctx, input }) => {
       const list = await db.getShoppingListById(input.listId, ctx.user.id);
       if (!list) throw new Error("Shopping list not found");
       const items = await db.getShoppingListItems(input.listId);
       const pendingItems = items.filter((i: any) => i.status === "pending");
       if (pendingItems.length === 0) throw new Error("No pending items to order");
-
-      // 2. Search order history for each item to find best product matches
-      const allKeywords: string[] = pendingItems.flatMap((item: any) => {
-        const words = [item.name];
-        // Extract brand from name if it looks like "Brand Product"
-        const nameParts = item.name.split(" ");
-        if (nameParts.length >= 2) words.push(nameParts[0]); // brand guess
-        if (item.notes) words.push(item.notes);
-        return words;
-      });
-
+      const allKeywords: string[] = pendingItems.flatMap((item: any) => { const words = [item.name]; const parts = item.name.split(" "); if (parts.length >= 2) words.push(parts[0]); if (item.notes) words.push(item.notes); return words; });
       const orderMatches = await db.searchOrderItems(ctx.user.id, allKeywords);
-
-      // 3. Build store-grouped items with product matches and cart URLs
-      type PreparedItem = {
-        id: number;
-        name: string;
-        quantity: number;
-        unit: string | null;
-        category: string | null;
-        notes: string | null;
-        estimatedPrice: string | null;
-        preferredStore: string | null;
-        bestMatch: {
-          productName: string;
-          platform: string;
-          price: string;
-          lastOrderDate: string;
-          matchScore: number;
-        } | null;
-        walmartSearchUrl: string;
-        amazonSearchUrl: string;
-      };
-
+      type PreparedItem = { id: number; name: string; quantity: number; unit: string | null; category: string | null; notes: string | null; estimatedPrice: string | null; preferredStore: string | null; bestMatch: { productName: string; platform: string; price: string; lastOrderDate: string; matchScore: number } | null; walmartSearchUrl: string; amazonSearchUrl: string };
       const preparedItems: PreparedItem[] = pendingItems.map((item: any) => {
-        // Find best match from order history
         const itemNameLower = item.name.toLowerCase();
-        const itemMatches = orderMatches.filter(m => {
-          const mNameLower = m.item.name.toLowerCase();
-          return mNameLower.includes(itemNameLower) ||
-            itemNameLower.includes(mNameLower.split(" ").slice(0, 3).join(" ")) ||
-            itemNameLower.split(" ").some((w: string) => w.length > 3 && mNameLower.includes(w));
-        }).sort((a, b) => b.matchScore - a.matchScore);
-
+        const itemMatches = orderMatches.filter(m => { const mNameLower = m.item.name.toLowerCase(); return mNameLower.includes(itemNameLower) || itemNameLower.includes(mNameLower.split(" ").slice(0, 3).join(" ")) || itemNameLower.split(" ").some((w: string) => w.length > 3 && mNameLower.includes(w)); }).sort((a, b) => b.matchScore - a.matchScore);
         const bestMatch = itemMatches[0] || null;
         const searchTerm = encodeURIComponent(item.name);
-
-        return {
-          id: item.id,
-          name: item.name,
-          quantity: item.quantity || 1,
-          unit: item.unit,
-          category: item.category,
-          notes: item.notes,
-          estimatedPrice: item.estimatedPrice || bestMatch?.item.price || null,
-          preferredStore: item.preferredStore || bestMatch?.platform || null,
-          bestMatch: bestMatch ? {
-            productName: bestMatch.item.name,
-            platform: bestMatch.platform,
-            price: bestMatch.item.price,
-            lastOrderDate: bestMatch.orderDate.toISOString(),
-            matchScore: bestMatch.matchScore,
-          } : null,
-          walmartSearchUrl: `https://www.walmart.com/search?q=${searchTerm}`,
-          amazonSearchUrl: `https://www.amazon.com/s?k=${searchTerm}`,
-        };
+        return { id: item.id, name: item.name, quantity: item.quantity || 1, unit: item.unit, category: item.category, notes: item.notes, estimatedPrice: item.estimatedPrice || bestMatch?.item.price || null, preferredStore: item.preferredStore || bestMatch?.platform || null, bestMatch: bestMatch ? { productName: bestMatch.item.name, platform: bestMatch.platform, price: bestMatch.item.price, lastOrderDate: bestMatch.orderDate.toISOString(), matchScore: bestMatch.matchScore } : null, walmartSearchUrl: `https://www.walmart.com/search?q=${searchTerm}`, amazonSearchUrl: `https://www.amazon.com/s?k=${searchTerm}` };
       });
-
-      // 4. Group by store
       const walmartItems = preparedItems.filter(i => i.preferredStore === "Walmart" || (!i.preferredStore && !i.bestMatch));
       const amazonItems = preparedItems.filter(i => i.preferredStore === "Amazon");
       const otherItems = preparedItems.filter(i => i.preferredStore && i.preferredStore !== "Walmart" && i.preferredStore !== "Amazon");
-
-      // 5. Generate aggregate search URLs (Walmart multi-item search)
-      const walmartCartUrl = walmartItems.length > 0
-        ? `https://www.walmart.com/search?q=${encodeURIComponent(walmartItems.map(i => i.name).join(", "))}`
-        : null;
-      const amazonCartUrl = amazonItems.length > 0
-        ? `https://www.amazon.com/s?k=${encodeURIComponent(amazonItems.map(i => i.name).join(", "))}`
-        : null;
-
-      // 6. Calculate estimated total
-      const estimatedTotal = preparedItems.reduce((sum, item) => {
-        const price = parseFloat(item.estimatedPrice || "0");
-        return sum + (price * item.quantity);
-      }, 0).toFixed(2);
-
-      return {
-        listId: input.listId,
-        listName: list.name,
-        totalItems: preparedItems.length,
-        estimatedTotal,
-        stores: {
-          walmart: { items: walmartItems, cartUrl: walmartCartUrl, count: walmartItems.length },
-          amazon: { items: amazonItems, cartUrl: amazonCartUrl, count: amazonItems.length },
-          other: { items: otherItems, count: otherItems.length },
-        },
-        allItems: preparedItems,
-      };
+      const walmartCartUrl = walmartItems.length > 0 ? `https://www.walmart.com/search?q=${encodeURIComponent(walmartItems.map(i => i.name).join(", "))}` : null;
+      const amazonCartUrl = amazonItems.length > 0 ? `https://www.amazon.com/s?k=${encodeURIComponent(amazonItems.map(i => i.name).join(", "))}` : null;
+      const estimatedTotal = preparedItems.reduce((sum, item) => { const price = parseFloat(item.estimatedPrice || "0"); return sum + (price * item.quantity); }, 0).toFixed(2);
+      return { listId: input.listId, listName: list.name, totalItems: preparedItems.length, estimatedTotal, stores: { walmart: { items: walmartItems, cartUrl: walmartCartUrl, count: walmartItems.length }, amazon: { items: amazonItems, cartUrl: amazonCartUrl, count: amazonItems.length }, other: { items: otherItems, count: otherItems.length } }, allItems: preparedItems };
     }),
-
-    markPurchased: protectedProcedure.input(z.object({
-      itemIds: z.array(z.number()).min(1),
-      platform: z.string(),
-      orderNumber: z.string().optional(),
-      totalAmount: z.string().optional(),
-    })).mutation(async ({ ctx, input }) => {
-      // Mark items as purchased
-      for (const itemId of input.itemIds) {
-        await db.updateShoppingListItem(itemId, {
-          status: "purchased" as any,
-          purchasedAt: new Date(),
-        });
-      }
-
-      // Get item details for order record
-      const itemDetails: Array<{ name: string; quantity: number; price: string }> = [];
-      for (const itemId of input.itemIds) {
-        // We'll use a simple approach - get all items from any list
-        // The items are already validated by the frontend
-      }
-
-      // Create an order record
-      const order = await db.createOrder({
-        userId: ctx.user.id,
-        platform: input.platform,
-        orderNumber: input.orderNumber || null,
-        vendor: input.platform === "Walmart" ? "Walmart.com" : input.platform === "Amazon" ? "Amazon.com" : input.platform,
-        totalAmount: input.totalAmount || null,
-        currency: "USD",
-        status: "pending",
-        items: [],
-        importSource: "manual",
-        orderDate: new Date(),
-      });
-
+    markPurchased: protectedProcedure.input(z.object({ itemIds: z.array(z.number()).min(1), platform: z.string(), orderNumber: z.string().optional(), totalAmount: z.string().optional() })).mutation(async ({ ctx, input }) => {
+      for (const itemId of input.itemIds) { await db.updateShoppingListItem(itemId, { status: "purchased" as any, purchasedAt: new Date() }); }
+      const order = await db.createOrder({ userId: ctx.user.id, platform: input.platform, orderNumber: input.orderNumber || null, vendor: input.platform === "Walmart" ? "Walmart.com" : input.platform === "Amazon" ? "Amazon.com" : input.platform, totalAmount: input.totalAmount || null, currency: "USD", status: "pending", items: [], importSource: "manual", orderDate: new Date() });
       return { orderId: order.id, markedCount: input.itemIds.length };
     }),
   }),
 
-  // ─── AI Features ───────────────────────────────────────────────────
   ai: router({
-    recommend: protectedProcedure.input(z.object({
-      context: z.string(),
-      familyMemberIds: z.array(z.number()).optional(),
-    })).mutation(async ({ ctx, input }) => {
+    recommend: protectedProcedure.input(z.object({ context: z.string(), familyMemberIds: z.array(z.number()).optional() })).mutation(async ({ ctx, input }) => {
       const recentOrders = await db.getOrders(ctx.user.id, 20);
       const familyMembers = await db.getFamilyMembers(ctx.user.id);
-
-      const orderHistory = recentOrders.map(o => ({
-        platform: o.platform,
-        vendor: o.vendor,
-        items: o.items,
-        date: o.orderDate,
-        amount: o.totalAmount,
-      }));
-
-      const familyContext = familyMembers.map(f => ({
-        name: f.name,
-        relationship: f.relationship,
-        sizes: f.clothingSizes,
-        dietary: f.dietaryRestrictions,
-        preferences: f.preferences,
-      }));
-
-      const response = await invokeLLM({
-        messages: [
-          {
-            role: "system",
-            content: `You are Geeve's, a smart shopping assistant. Based on the user's purchase history and family profiles, provide personalized shopping recommendations. Consider seasonal needs, family member sizes, dietary restrictions, and purchasing patterns. Format your response as helpful, actionable recommendations in markdown.`,
-          },
-          {
-            role: "user",
-            content: `Context: ${input.context}\n\nRecent order history: ${JSON.stringify(orderHistory)}\n\nFamily members: ${JSON.stringify(familyContext)}`,
-          },
-        ],
-      });
-
+      const orderHistory = recentOrders.map(o => ({ platform: o.platform, vendor: o.vendor, items: o.items, date: o.orderDate, amount: o.totalAmount }));
+      const familyContext = familyMembers.map(f => ({ name: f.name, relationship: f.relationship, sizes: f.clothingSizes, dietary: f.dietaryRestrictions, preferences: f.preferences }));
+      const response = await invokeLLM({ messages: [{ role: "system", content: `You are Geeve's, a smart shopping assistant.` }, { role: "user", content: `Context: ${input.context}\n\nRecent order history: ${JSON.stringify(orderHistory)}\n\nFamily members: ${JSON.stringify(familyContext)}` }] });
       return { recommendation: response.choices[0]?.message?.content || "No recommendations available." };
     }),
-
-    categorizeExpense: protectedProcedure.input(z.object({
-      description: z.string(),
-      vendor: z.string().optional(),
-      amount: z.string(),
-    })).mutation(async ({ input }) => {
-      const response = await invokeLLM({
-        messages: [
-          {
-            role: "system",
-            content: `You categorize expenses as personal or business, and assign an expense category. Return JSON with fields: classification ("personal" or "business"), expenseCategory (string like "groceries", "office_supplies", "clothing", "utilities", "travel", "meals", "software", "equipment", etc.), isTaxDeductible (boolean), taxCategory (string or null), confidence (number 0-100).`,
-          },
-          {
-            role: "user",
-            content: `Description: ${input.description}\nVendor: ${input.vendor || "Unknown"}\nAmount: ${input.amount}`,
-          },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "expense_categorization",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                classification: { type: "string", enum: ["personal", "business"] },
-                expenseCategory: { type: "string" },
-                isTaxDeductible: { type: "boolean" },
-                taxCategory: { type: ["string", "null"] },
-                confidence: { type: "number" },
-              },
-              required: ["classification", "expenseCategory", "isTaxDeductible", "taxCategory", "confidence"],
-              additionalProperties: false,
-            },
-          },
-        },
-      });
-
+    categorizeExpense: protectedProcedure.input(z.object({ description: z.string(), vendor: z.string().optional(), amount: z.string() })).mutation(async ({ input }) => {
+      const response = await invokeLLM({ messages: [{ role: "system", content: `You categorize expenses as personal or business.` }, { role: "user", content: `Description: ${input.description}\nVendor: ${input.vendor || "Unknown"}\nAmount: ${input.amount}` }], response_format: { type: "json_schema", json_schema: { name: "expense_categorization", strict: true, schema: { type: "object", properties: { classification: { type: "string", enum: ["personal", "business"] }, expenseCategory: { type: "string" }, isTaxDeductible: { type: "boolean" }, taxCategory: { type: ["string", "null"] }, confidence: { type: "number" } }, required: ["classification", "expenseCategory", "isTaxDeductible", "taxCategory", "confidence"], additionalProperties: false } } } });
       const content = response.choices[0]?.message?.content;
       return typeof content === "string" ? JSON.parse(content) : { classification: "personal", expenseCategory: "other", isTaxDeductible: false, taxCategory: null, confidence: 0 };
     }),
-
-    parseEmailOrder: protectedProcedure.input(z.object({
-      emailContent: z.string().min(1),
-    })).mutation(async ({ ctx, input }) => {
-      const response = await invokeLLM({
-        messages: [
-          {
-            role: "system",
-            content: `You parse order confirmation emails and extract order details.
-
-For Walmart emails: the total is usually labelled "Estimated total", "Order total", "Total", or "Subtotal" — use the LARGEST total figure that represents the full charge (including tax). Walmart often shows amounts like "$47.83" — strip the dollar sign and return only the numeric value (e.g. "47.83").
-
-For Amazon emails: look for "Order Total", "Grand Total", or "Charged to" amounts.
-
-Return JSON with:
-- platform (string - e.g. "Amazon", "Walmart", "Target")
-- orderNumber (string or null)
-- vendor (string)
-- totalAmount (string - NUMERIC ONLY, no currency symbols, e.g. "47.83" not "$47.83")
-- currency (string - "USD" or "JMD")
-- items (array of {name: string, quantity: number, price: string})
-- orderDate (ISO date string)
-- trackingNumber (string or null)`,
-          },
-          { role: "user", content: input.emailContent },
-        ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "parsed_order",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                platform: { type: "string" },
-                orderNumber: { type: ["string", "null"] },
-                vendor: { type: "string" },
-                totalAmount: { type: "string" },
-                currency: { type: "string" },
-                items: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      name: { type: "string" },
-                      quantity: { type: "number" },
-                      price: { type: "string" },
-                    },
-                    required: ["name", "quantity", "price"],
-                    additionalProperties: false,
-                  },
-                },
-                orderDate: { type: "string" },
-                trackingNumber: { type: ["string", "null"] },
-              },
-              required: ["platform", "orderNumber", "vendor", "totalAmount", "currency", "items", "orderDate", "trackingNumber"],
-              additionalProperties: false,
-            },
-          },
-        },
-      });
-
+    parseEmailOrder: protectedProcedure.input(z.object({ emailContent: z.string().min(1) })).mutation(async ({ ctx, input }) => {
+      const response = await invokeLLM({ messages: [{ role: "system", content: `You parse order confirmation emails.` }, { role: "user", content: input.emailContent }], response_format: { type: "json_schema", json_schema: { name: "parsed_order", strict: true, schema: { type: "object", properties: { platform: { type: "string" }, orderNumber: { type: ["string", "null"] }, vendor: { type: "string" }, totalAmount: { type: "string" }, currency: { type: "string" }, items: { type: "array", items: { type: "object", properties: { name: { type: "string" }, quantity: { type: "number" }, price: { type: "string" } }, required: ["name", "quantity", "price"], additionalProperties: false } }, orderDate: { type: "string" }, trackingNumber: { type: ["string", "null"] } }, required: ["platform", "orderNumber", "vendor", "totalAmount", "currency", "items", "orderDate", "trackingNumber"], additionalProperties: false } } } });
       const content = response.choices[0]?.message?.content;
       const parsed = typeof content === "string" ? JSON.parse(content) : null;
-
-      // Post-process: strip any currency symbols the LLM may have included in totalAmount
-      // e.g. "$47.83" → "47.83", "USD 47.83" → "47.83", "47.83 USD" → "47.83"
-      if (parsed?.totalAmount && typeof parsed.totalAmount === "string") {
-        const cleaned = parsed.totalAmount.replace(/[^0-9.]/g, "").trim();
-        if (cleaned && !isNaN(parseFloat(cleaned))) {
-          parsed.totalAmount = cleaned;
-        }
-      }
-
-      if (parsed) {
-        const order = await db.createOrder({
-          userId: ctx.user.id,
-          platform: parsed.platform,
-          orderNumber: parsed.orderNumber,
-          vendor: parsed.vendor,
-          totalAmount: parsed.totalAmount,
-          currency: parsed.currency,
-          items: parsed.items,
-          importSource: "email",
-          orderDate: new Date(parsed.orderDate),
-          trackingNumber: parsed.trackingNumber,
-        });
-        return { ...parsed, id: order.id };
-      }
-
+      if (parsed?.totalAmount && typeof parsed.totalAmount === "string") { const cleaned = parsed.totalAmount.replace(/[^0-9.]/g, "").trim(); if (cleaned && !isNaN(parseFloat(cleaned))) { parsed.totalAmount = cleaned; } }
+      if (parsed) { const order = await db.createOrder({ userId: ctx.user.id, platform: parsed.platform, orderNumber: parsed.orderNumber, vendor: parsed.vendor, totalAmount: parsed.totalAmount, currency: parsed.currency, items: parsed.items, importSource: "email", orderDate: new Date(parsed.orderDate), trackingNumber: parsed.trackingNumber }); return { ...parsed, id: order.id }; }
       return parsed;
     }),
   }),
 
-  // ─── Receipt Upload ────────────────────────────────────────────────
   receipts: router({
-    upload: protectedProcedure.input(z.object({
-      transactionId: z.number(),
-      fileBase64: z.string(),
-      fileName: z.string(),
-      mimeType: z.string(),
-    })).mutation(async ({ ctx, input }) => {
+    upload: protectedProcedure.input(z.object({ transactionId: z.number(), fileBase64: z.string(), fileName: z.string(), mimeType: z.string() })).mutation(async ({ ctx, input }) => {
       const buffer = Buffer.from(input.fileBase64, "base64");
       const fileKey = `receipts/${ctx.user.id}/${input.transactionId}-${nanoid(8)}-${input.fileName}`;
       const { url } = await storagePut(fileKey, buffer, input.mimeType);
@@ -1092,601 +629,96 @@ Return JSON with:
     }),
   }),
 
-  // ─── Shopping Agent (Autonomous Shopping) ──────────────────────────
   shopAgent: router({
-    // Create a new shopping session from a list
-    createSession: protectedProcedure.input(z.object({
-      listId: z.number(),
-    })).mutation(async ({ ctx, input }) => {
+    createSession: protectedProcedure.input(z.object({ listId: z.number() })).mutation(async ({ ctx, input }) => {
       const list = await db.getShoppingListById(input.listId, ctx.user.id);
       if (!list) throw new Error("Shopping list not found");
       const items = await db.getShoppingListItems(input.listId);
       const pendingItems = items.filter((i: any) => i.status === "pending");
       if (pendingItems.length === 0) throw new Error("No pending items to shop");
-
-      // Check if platform credentials exist
       const credentials = await db.getPlatformCredentials(ctx.user.id);
       const hasWalmart = credentials.some((c: any) => c.platform === "Walmart");
       const hasAmazon = credentials.some((c: any) => c.platform === "Amazon");
       const hasAnyCredentials = hasWalmart || hasAmazon;
-
-      // Search order history for best platform assignment
-      const allKeywords = pendingItems.flatMap((item: any) => {
-        const words = [item.name];
-        const parts = item.name.split(" ");
-        if (parts.length >= 2) words.push(parts[0]);
-        return words;
-      });
+      const allKeywords = pendingItems.flatMap((item: any) => { const words = [item.name]; const parts = item.name.split(" "); if (parts.length >= 2) words.push(parts[0]); return words; });
       const orderMatches = await db.searchOrderItems(ctx.user.id, allKeywords);
-
-      // Determine initial status based on credentials
       const initialStatus = hasAnyCredentials ? "ready" : "pending_credentials";
-
-      // Create the session
-      const session = await db.createShoppingSession({
-        userId: ctx.user.id,
-        listId: input.listId,
-        listName: list.name,
-        status: initialStatus,
-        totalItems: pendingItems.length,
-        notifications: [{
-          type: "info",
-          message: hasAnyCredentials
-            ? "Session created. Geeves is ready to shop — tell Geeves to begin when you're ready."
-            : "Session created. Please add your Walmart or Amazon login credentials before Geeves can shop.",
-          timestamp: new Date().toISOString(),
-        }],
-      });
-
-      // Create session items with platform assignment
-      const sessionItems = pendingItems.map((item: any) => {
-        const itemNameLower = item.name.toLowerCase();
-        const itemMatches = orderMatches.filter(m => {
-          const mNameLower = m.item.name.toLowerCase();
-          return mNameLower.includes(itemNameLower) ||
-            itemNameLower.includes(mNameLower.split(" ").slice(0, 3).join(" ")) ||
-            itemNameLower.split(" ").some((w: string) => w.length > 3 && mNameLower.includes(w));
-        }).sort((a, b) => b.matchScore - a.matchScore);
-
-        const bestMatch = itemMatches[0];
-        // Assign platform: use preferred store, or best match platform, or default to Walmart
-        const assignedPlatform = item.preferredStore || bestMatch?.platform || "Walmart";
-
-        return {
-          sessionId: session.id,
-          listItemId: item.id,
-          name: item.name,
-          quantity: item.quantity || 1,
-          unit: item.unit,
-          assignedPlatform,
-          originalPlatform: assignedPlatform,
-          status: "queued" as const,
-          matchedProductName: bestMatch?.item.name || null,
-          matchedPrice: bestMatch?.item.price || item.estimatedPrice || null,
-          matchConfidence: bestMatch?.matchScore || null,
-        };
-      });
-
+      const session = await db.createShoppingSession({ userId: ctx.user.id, listId: input.listId, listName: list.name, status: initialStatus, totalItems: pendingItems.length, notifications: [{ type: "info", message: hasAnyCredentials ? "Session created. Geeves is ready to shop." : "Session created. Please add credentials before Geeves can shop.", timestamp: new Date().toISOString() }] });
+      const sessionItems = pendingItems.map((item: any) => { const itemNameLower = item.name.toLowerCase(); const itemMatches = orderMatches.filter(m => { const mNameLower = m.item.name.toLowerCase(); return mNameLower.includes(itemNameLower) || itemNameLower.includes(mNameLower.split(" ").slice(0, 3).join(" ")) || itemNameLower.split(" ").some((w: string) => w.length > 3 && mNameLower.includes(w)); }).sort((a, b) => b.matchScore - a.matchScore); const bestMatch = itemMatches[0]; const assignedPlatform = item.preferredStore || bestMatch?.platform || "Walmart"; return { sessionId: session.id, listItemId: item.id, name: item.name, quantity: item.quantity || 1, unit: item.unit, assignedPlatform, originalPlatform: assignedPlatform, status: "queued" as const, matchedProductName: bestMatch?.item.name || null, matchedPrice: bestMatch?.item.price || item.estimatedPrice || null, matchConfidence: bestMatch?.matchScore || null }; });
       await db.bulkCreateSessionItems(sessionItems);
-
-      // Session stays in ready/pending_credentials — does NOT auto-advance to "shopping"
-
-      return {
-        sessionId: session.id,
-        status: initialStatus,
-        hasWalmart,
-        hasAmazon,
-      };
+      return { sessionId: session.id, status: initialStatus, hasWalmart, hasAmazon };
     }),
-
-    // Get session with all items
-    getSession: protectedProcedure.input(z.object({
-      sessionId: z.number(),
-    })).query(async ({ ctx, input }) => {
+    getSession: protectedProcedure.input(z.object({ sessionId: z.number() })).query(async ({ ctx, input }) => {
       const session = await db.getShoppingSession(input.sessionId, ctx.user.id);
       if (!session) throw new Error("Session not found");
       const items = await db.getSessionItems(input.sessionId);
-
-      // Group items by platform
       const walmartItems = items.filter(i => i.assignedPlatform === "Walmart");
       const amazonItems = items.filter(i => i.assignedPlatform === "Amazon");
-
-      // Calculate totals
       const walmartTotal = walmartItems.reduce((sum, i) => sum + parseFloat(String(i.matchedPrice || "0")) * (i.quantity || 1), 0);
       const amazonTotal = amazonItems.reduce((sum, i) => sum + parseFloat(String(i.matchedPrice || "0")) * (i.quantity || 1), 0);
-
-      return {
-        ...session,
-        items,
-        platforms: {
-          walmart: { items: walmartItems, total: walmartTotal.toFixed(2), count: walmartItems.length },
-          amazon: { items: amazonItems, total: amazonTotal.toFixed(2), count: amazonItems.length },
-        },
-        overallTotal: (walmartTotal + amazonTotal).toFixed(2),
-      };
+      return { ...session, items, platforms: { walmart: { items: walmartItems, total: walmartTotal.toFixed(2), count: walmartItems.length }, amazon: { items: amazonItems, total: amazonTotal.toFixed(2), count: amazonItems.length } }, overallTotal: (walmartTotal + amazonTotal).toFixed(2) };
     }),
-
-    // List all sessions
     listSessions: protectedProcedure.query(({ ctx }) => db.getShoppingSessions(ctx.user.id)),
-
-    // Update a single session item (for when Geeves finds/adds/substitutes items)
-    updateItem: protectedProcedure.input(z.object({
-      itemId: z.number(),
-      status: z.enum(["queued", "searching", "found", "added_to_cart", "substituted", "unavailable", "transferred", "rejected"]).optional(),
-      matchedProductName: z.string().nullable().optional(),
-      matchedProductUrl: z.string().nullable().optional(),
-      matchedPrice: z.string().nullable().optional(),
-      matchConfidence: z.number().nullable().optional(),
-      substitutionReason: z.string().nullable().optional(),
-      originalProductName: z.string().nullable().optional(),
-      transferReason: z.string().nullable().optional(),
-      assignedPlatform: z.string().optional(),
-      estimatedDelivery: z.string().nullable().optional(),
-      fulfillmentMethod: z.string().nullable().optional(),
-    })).mutation(async ({ input }) => {
-      const { itemId, ...data } = input;
-      await db.updateSessionItem(itemId, data as any);
-      return { success: true };
-    }),
-
-    // Transfer unavailable items from one platform to another
-    transferItems: protectedProcedure.input(z.object({
-      itemIds: z.array(z.number()),
-      fromPlatform: z.string(),
-      toPlatform: z.string(),
-      reason: z.string(),
-    })).mutation(async ({ input }) => {
-      await db.bulkUpdateSessionItems(input.itemIds, {
-        assignedPlatform: input.toPlatform,
-        status: "transferred" as any,
-        transferReason: input.reason,
-      });
-      return { transferred: input.itemIds.length };
-    }),
-
-    // Update session status and totals
-    updateSession: protectedProcedure.input(z.object({
-      sessionId: z.number(),
-      status: z.enum(["pending_credentials", "ready", "preparing", "shopping", "awaiting_review", "approved", "completed", "cancelled"]).optional(),
-      walmartTotal: z.string().optional(),
-      amazonTotal: z.string().optional(),
-      overallTotal: z.string().optional(),
-      deliveryInfo: z.any().optional(),
-      itemsFound: z.number().optional(),
-      itemsSubstituted: z.number().optional(),
-      itemsUnavailable: z.number().optional(),
-      itemsCrossTransferred: z.number().optional(),
-    })).mutation(async ({ input }) => {
-      const { sessionId, ...data } = input;
-      await db.updateShoppingSession(sessionId, data as any);
-      return { success: true };
-    }),
-
-    // Add a notification to the session log
-    addNotification: protectedProcedure.input(z.object({
-      sessionId: z.number(),
-      type: z.enum(["info", "warning", "error", "success"]),
-      message: z.string(),
-    })).mutation(async ({ ctx, input }) => {
-      const session = await db.getShoppingSession(input.sessionId, ctx.user.id);
-      if (!session) throw new Error("Session not found");
-      const notifications = (session.notifications as any[] || []);
-      notifications.push({
-        type: input.type,
-        message: input.message,
-        timestamp: new Date().toISOString(),
-      });
-      await db.updateShoppingSession(input.sessionId, { notifications });
-      return { success: true };
-    }),
-
-    // Finalize session — mark as awaiting review with final report
-    finalize: protectedProcedure.input(z.object({
-      sessionId: z.number(),
-      walmartTotal: z.string(),
-      amazonTotal: z.string(),
-      deliveryInfo: z.any(),
-    })).mutation(async ({ ctx, input }) => {
-      const session = await db.getShoppingSession(input.sessionId, ctx.user.id);
-      if (!session) throw new Error("Session not found");
-      const items = await db.getSessionItems(input.sessionId);
-
-      const overallTotal = (parseFloat(input.walmartTotal) + parseFloat(input.amazonTotal)).toFixed(2);
-      const itemsFound = items.filter(i => i.status === "added_to_cart" || i.status === "found").length;
-      const itemsSubstituted = items.filter(i => i.status === "substituted").length;
-      const itemsUnavailable = items.filter(i => i.status === "unavailable").length;
-      const itemsCrossTransferred = items.filter(i => i.status === "transferred").length;
-
-      await db.updateShoppingSession(input.sessionId, {
-        status: "awaiting_review",
-        walmartTotal: input.walmartTotal,
-        amazonTotal: input.amazonTotal,
-        overallTotal,
-        deliveryInfo: input.deliveryInfo,
-        itemsFound,
-        itemsSubstituted,
-        itemsUnavailable,
-        itemsCrossTransferred,
-      });
-
-      return {
-        sessionId: input.sessionId,
-        status: "awaiting_review",
-        walmartTotal: input.walmartTotal,
-        amazonTotal: input.amazonTotal,
-        overallTotal,
-        itemsFound,
-        itemsSubstituted,
-        itemsUnavailable,
-        itemsCrossTransferred,
-        totalItems: items.length,
-      };
-    }),
-
-    // Approve session — user confirms checkout
-    approve: protectedProcedure.input(z.object({
-      sessionId: z.number(),
-    })).mutation(async ({ ctx, input }) => {
-      const session = await db.getShoppingSession(input.sessionId, ctx.user.id);
-      if (!session) throw new Error("Session not found");
-      if (session.status !== "awaiting_review") throw new Error("Session is not awaiting review");  
-      await db.updateShoppingSession(input.sessionId, { status: "approved" });
-      return { success: true, message: "Session approved. Geeve's will proceed with checkout." };
-    }),
-
-    // Reject/cancel session — can cancel from any non-terminal state
-    cancel: protectedProcedure.input(z.object({
-      sessionId: z.number(),
-    })).mutation(async ({ ctx, input }) => {
-      const session = await db.getShoppingSession(input.sessionId, ctx.user.id);
-      if (!session) throw new Error("Session not found");
-      if (["completed", "cancelled"].includes(session.status)) {
-        throw new Error("Session is already " + session.status);
-      }
-      await db.updateShoppingSession(input.sessionId, { status: "cancelled" });
-      return { success: true };
-    }),
-
-    // Platform credentials management
+    updateItem: protectedProcedure.input(z.object({ itemId: z.number(), status: z.enum(["queued", "searching", "found", "added_to_cart", "substituted", "unavailable", "transferred", "rejected"]).optional(), matchedProductName: z.string().nullable().optional(), matchedProductUrl: z.string().nullable().optional(), matchedPrice: z.string().nullable().optional(), matchConfidence: z.number().nullable().optional(), substitutionReason: z.string().nullable().optional(), originalProductName: z.string().nullable().optional(), transferReason: z.string().nullable().optional(), assignedPlatform: z.string().optional(), estimatedDelivery: z.string().nullable().optional(), fulfillmentMethod: z.string().nullable().optional() })).mutation(async ({ input }) => { const { itemId, ...data } = input; await db.updateSessionItem(itemId, data as any); return { success: true }; }),
+    transferItems: protectedProcedure.input(z.object({ itemIds: z.array(z.number()), fromPlatform: z.string(), toPlatform: z.string(), reason: z.string() })).mutation(async ({ input }) => { await db.bulkUpdateSessionItems(input.itemIds, { assignedPlatform: input.toPlatform, status: "transferred" as any, transferReason: input.reason }); return { transferred: input.itemIds.length }; }),
+    updateSession: protectedProcedure.input(z.object({ sessionId: z.number(), status: z.enum(["pending_credentials", "ready", "preparing", "shopping", "awaiting_review", "approved", "completed", "cancelled"]).optional(), walmartTotal: z.string().optional(), amazonTotal: z.string().optional(), overallTotal: z.string().optional(), deliveryInfo: z.any().optional(), itemsFound: z.number().optional(), itemsSubstituted: z.number().optional(), itemsUnavailable: z.number().optional(), itemsCrossTransferred: z.number().optional() })).mutation(async ({ input }) => { const { sessionId, ...data } = input; await db.updateShoppingSession(sessionId, data as any); return { success: true }; }),
+    addNotification: protectedProcedure.input(z.object({ sessionId: z.number(), type: z.enum(["info", "warning", "error", "success"]), message: z.string() })).mutation(async ({ ctx, input }) => { const session = await db.getShoppingSession(input.sessionId, ctx.user.id); if (!session) throw new Error("Session not found"); const notifications = (session.notifications as any[] || []); notifications.push({ type: input.type, message: input.message, timestamp: new Date().toISOString() }); await db.updateShoppingSession(input.sessionId, { notifications }); return { success: true }; }),
+    finalize: protectedProcedure.input(z.object({ sessionId: z.number(), walmartTotal: z.string(), amazonTotal: z.string(), deliveryInfo: z.any() })).mutation(async ({ ctx, input }) => { const session = await db.getShoppingSession(input.sessionId, ctx.user.id); if (!session) throw new Error("Session not found"); const items = await db.getSessionItems(input.sessionId); const overallTotal = (parseFloat(input.walmartTotal) + parseFloat(input.amazonTotal)).toFixed(2); const itemsFound = items.filter(i => i.status === "added_to_cart" || i.status === "found").length; const itemsSubstituted = items.filter(i => i.status === "substituted").length; const itemsUnavailable = items.filter(i => i.status === "unavailable").length; const itemsCrossTransferred = items.filter(i => i.status === "transferred").length; await db.updateShoppingSession(input.sessionId, { status: "awaiting_review", walmartTotal: input.walmartTotal, amazonTotal: input.amazonTotal, overallTotal, deliveryInfo: input.deliveryInfo, itemsFound, itemsSubstituted, itemsUnavailable, itemsCrossTransferred }); return { sessionId: input.sessionId, status: "awaiting_review", walmartTotal: input.walmartTotal, amazonTotal: input.amazonTotal, overallTotal, itemsFound, itemsSubstituted, itemsUnavailable, itemsCrossTransferred, totalItems: items.length }; }),
+    approve: protectedProcedure.input(z.object({ sessionId: z.number() })).mutation(async ({ ctx, input }) => { const session = await db.getShoppingSession(input.sessionId, ctx.user.id); if (!session) throw new Error("Session not found"); if (session.status !== "awaiting_review") throw new Error("Session is not awaiting review"); await db.updateShoppingSession(input.sessionId, { status: "approved" }); return { success: true, message: "Session approved." }; }),
+    cancel: protectedProcedure.input(z.object({ sessionId: z.number() })).mutation(async ({ ctx, input }) => { const session = await db.getShoppingSession(input.sessionId, ctx.user.id); if (!session) throw new Error("Session not found"); if (["completed", "cancelled"].includes(session.status)) throw new Error("Session is already " + session.status); await db.updateShoppingSession(input.sessionId, { status: "cancelled" }); return { success: true }; }),
     credentials: router({
       list: protectedProcedure.query(({ ctx }) => db.getPlatformCredentials(ctx.user.id)),
-
-      get: protectedProcedure.input(z.object({
-        platform: z.string(),
-      })).query(({ ctx, input }) => db.getPlatformCredential(ctx.user.id, input.platform)),
-
-      upsert: protectedProcedure.input(z.object({
-        platform: z.string(),
-        credentialData: z.any(),
-      })).mutation(({ ctx, input }) => db.upsertPlatformCredential({
-        userId: ctx.user.id,
-        platform: input.platform,
-        credentialData: input.credentialData,
-      })),
+      get: protectedProcedure.input(z.object({ platform: z.string() })).query(({ ctx, input }) => db.getPlatformCredential(ctx.user.id, input.platform)),
+      upsert: protectedProcedure.input(z.object({ platform: z.string(), credentialData: z.any() })).mutation(({ ctx, input }) => db.upsertPlatformCredential({ userId: ctx.user.id, platform: input.platform, credentialData: input.credentialData })),
     }),
-
-    // ─── One-Click Add To Cart URL Generator ──────────────────────
-    generateCartUrl: protectedProcedure.input(z.object({
-      sessionId: z.number(),
-      platform: z.enum(["walmart", "amazon"]).default("walmart"),
-    })).mutation(async ({ ctx, input }) => {
+    generateCartUrl: protectedProcedure.input(z.object({ sessionId: z.number(), platform: z.enum(["walmart", "amazon"]).default("walmart") })).mutation(async ({ ctx, input }) => {
       const session = await db.getShoppingSession(input.sessionId, ctx.user.id);
       if (!session) throw new Error("Session not found");
       const items = await db.getSessionItems(input.sessionId);
-      const platformItems = items.filter(i =>
-        i.assignedPlatform?.toLowerCase() === input.platform
-      );
+      const platformItems = items.filter(i => i.assignedPlatform?.toLowerCase() === input.platform);
       if (platformItems.length === 0) throw new Error(`No ${input.platform} items in this session`);
-
-      // Look up product mappings for all items
       const itemNames = platformItems.map(i => i.name);
       const mappings = await db.bulkFindProductMappings(ctx.user.id, itemNames, input.platform);
-
-      // Also try individual fuzzy lookups for items not found in bulk
       const mappingsByNormalized = new Map(mappings.map(m => [m.normalizedName, m]));
-      const resolvedItems: Array<{
-        name: string;
-        quantity: number;
-        productId: string | null;
-        productName: string | null;
-        productUrl: string | null;
-        lastPrice: string | null;
-        matched: boolean;
-      }> = [];
-
-      for (const item of platformItems) {
-        const normalized = item.name.toLowerCase().trim();
-        let mapping = mappingsByNormalized.get(normalized);
-        if (!mapping) {
-          // Try fuzzy lookup
-          mapping = await db.findProductMapping(ctx.user.id, item.name, input.platform) || undefined;
-        }
-        resolvedItems.push({
-          name: item.name,
-          quantity: item.quantity || 1,
-          productId: mapping?.productId || null,
-          productName: mapping?.productName || null,
-          productUrl: mapping?.productUrl || null,
-          lastPrice: mapping?.lastPrice?.toString() || null,
-          matched: !!mapping,
-        });
-      }
-
+      const resolvedItems: Array<{ name: string; quantity: number; productId: string | null; productName: string | null; productUrl: string | null; lastPrice: string | null; matched: boolean }> = [];
+      for (const item of platformItems) { const normalized = item.name.toLowerCase().trim(); let mapping = mappingsByNormalized.get(normalized); if (!mapping) { mapping = await db.findProductMapping(ctx.user.id, item.name, input.platform) || undefined; } resolvedItems.push({ name: item.name, quantity: item.quantity || 1, productId: mapping?.productId || null, productName: mapping?.productName || null, productUrl: mapping?.productUrl || null, lastPrice: mapping?.lastPrice?.toString() || null, matched: !!mapping }); }
       const matchedItems = resolvedItems.filter(i => i.matched);
       const unmatchedItems = resolvedItems.filter(i => !i.matched);
-
-      // Generate the Add To Cart URL
       let cartUrl = "";
-      if (input.platform === "walmart") {
-        // Walmart format: walmart.com/sc/cart/addToCart?items=ID1_qty,ID2_qty,...
-        const itemParams = matchedItems.map(i => {
-          if ((i.quantity || 1) > 1) return `${i.productId}_${i.quantity}`;
-          return i.productId;
-        }).join(",");
-        cartUrl = `https://www.walmart.com/sc/cart/addToCart?items=${itemParams}`;
-      } else if (input.platform === "amazon") {
-        // Amazon format: amazon.com/gp/aws/cart/add.html?ASIN.1=X&Quantity.1=Y&...
-        const params = matchedItems.map((item, idx) => {
-          const n = idx + 1;
-          return `ASIN.${n}=${item.productId}&Quantity.${n}=${item.quantity || 1}`;
-        }).join("&");
-        cartUrl = `https://www.amazon.com/gp/aws/cart/add.html?${params}`;
-      }
-
-      // Estimate total from cached prices
-      const estimatedTotal = matchedItems.reduce((sum, i) => {
-        return sum + (parseFloat(i.lastPrice || "0") * (i.quantity || 1));
-      }, 0);
-
-      return {
-        cartUrl,
-        platform: input.platform,
-        matchedCount: matchedItems.length,
-        unmatchedCount: unmatchedItems.length,
-        totalItems: resolvedItems.length,
-        matchedItems: matchedItems.map(i => ({
-          name: i.name,
-          quantity: i.quantity,
-          productName: i.productName,
-          lastPrice: i.lastPrice,
-        })),
-        unmatchedItems: unmatchedItems.map(i => ({
-          name: i.name,
-          quantity: i.quantity,
-        })),
-        estimatedTotal: estimatedTotal.toFixed(2),
-        message: unmatchedItems.length > 0
-          ? `${matchedItems.length} of ${resolvedItems.length} items matched. ${unmatchedItems.length} items need manual search.`
-          : `All ${matchedItems.length} items matched! Click the link to add them all to your ${input.platform} cart.`,
-      };
+      if (input.platform === "walmart") { const itemParams = matchedItems.map(i => { if ((i.quantity || 1) > 1) return `${i.productId}_${i.quantity}`; return i.productId; }).join(","); cartUrl = `https://www.walmart.com/sc/cart/addToCart?items=${itemParams}`; } else if (input.platform === "amazon") { const params = matchedItems.map((item, idx) => { const n = idx + 1; return `ASIN.${n}=${item.productId}&Quantity.${n}=${item.quantity || 1}`; }).join("&"); cartUrl = `https://www.amazon.com/gp/aws/cart/add.html?${params}`; }
+      const estimatedTotal = matchedItems.reduce((sum, i) => { return sum + (parseFloat(i.lastPrice || "0") * (i.quantity || 1)); }, 0);
+      return { cartUrl, platform: input.platform, matchedCount: matchedItems.length, unmatchedCount: unmatchedItems.length, totalItems: resolvedItems.length, matchedItems: matchedItems.map(i => ({ name: i.name, quantity: i.quantity, productName: i.productName, lastPrice: i.lastPrice })), unmatchedItems: unmatchedItems.map(i => ({ name: i.name, quantity: i.quantity })), estimatedTotal: estimatedTotal.toFixed(2), message: unmatchedItems.length > 0 ? `${matchedItems.length} of ${resolvedItems.length} items matched. ${unmatchedItems.length} items need manual search.` : `All ${matchedItems.length} items matched!` };
     }),
-
-    // ─── Product Mappings Management ──────────────────────────────
     mappings: router({
-      list: protectedProcedure.input(z.object({
-        platform: z.string().optional(),
-      }).optional()).query(({ ctx, input }) =>
-        db.getProductMappings(ctx.user.id, input?.platform)
-      ),
-
-      find: protectedProcedure.input(z.object({
-        itemName: z.string(),
-        platform: z.string(),
-      })).query(({ ctx, input }) =>
-        db.findProductMapping(ctx.user.id, input.itemName, input.platform)
-      ),
-
-      upsert: protectedProcedure.input(z.object({
-        itemName: z.string(),
-        platform: z.string(),
-        productId: z.string(),
-        productName: z.string(),
-        productUrl: z.string().optional(),
-        lastPrice: z.string().optional(),
-        confidence: z.number().optional(),
-        isVerified: z.boolean().optional(),
-      })).mutation(({ ctx, input }) =>
-        db.upsertProductMapping({ ...input, userId: ctx.user.id })
-      ),
-
-      delete: protectedProcedure.input(z.object({
-        id: z.number(),
-      })).mutation(({ ctx, input }) =>
-        db.deleteProductMapping(input.id, ctx.user.id)
-      ),
-
-      stats: protectedProcedure.query(async ({ ctx }) => {
-        const allMappings = await db.getProductMappings(ctx.user.id);
-        const walmart = allMappings.filter(m => m.platform === "walmart");
-        const amazon = allMappings.filter(m => m.platform === "amazon");
-        const verified = allMappings.filter(m => m.isVerified);
-        return {
-          total: allMappings.length,
-          walmart: walmart.length,
-          amazon: amazon.length,
-          verified: verified.length,
-          topItems: allMappings.slice(0, 10).map(m => ({
-            name: m.itemName,
-            platform: m.platform,
-            productName: m.productName,
-            useCount: m.useCount,
-            lastPrice: m.lastPrice,
-          })),
-        };
-      }),
+      list: protectedProcedure.input(z.object({ platform: z.string().optional() }).optional()).query(({ ctx, input }) => db.getProductMappings(ctx.user.id, input?.platform)),
+      find: protectedProcedure.input(z.object({ itemName: z.string(), platform: z.string() })).query(({ ctx, input }) => db.findProductMapping(ctx.user.id, input.itemName, input.platform)),
+      upsert: protectedProcedure.input(z.object({ itemName: z.string(), platform: z.string(), productId: z.string(), productName: z.string(), productUrl: z.string().optional(), lastPrice: z.string().optional(), confidence: z.number().optional(), isVerified: z.boolean().optional() })).mutation(({ ctx, input }) => db.upsertProductMapping({ ...input, userId: ctx.user.id })),
+      delete: protectedProcedure.input(z.object({ id: z.number() })).mutation(({ ctx, input }) => db.deleteProductMapping(input.id, ctx.user.id)),
+      stats: protectedProcedure.query(async ({ ctx }) => { const allMappings = await db.getProductMappings(ctx.user.id); const walmart = allMappings.filter(m => m.platform === "walmart"); const amazon = allMappings.filter(m => m.platform === "amazon"); const verified = allMappings.filter(m => m.isVerified); return { total: allMappings.length, walmart: walmart.length, amazon: amazon.length, verified: verified.length, topItems: allMappings.slice(0, 10).map(m => ({ name: m.itemName, platform: m.platform, productName: m.productName, useCount: m.useCount, lastPrice: m.lastPrice })) }; }),
     }),
-
-    // ─── Auto-Learn from URLs ─────────────────────────────────────
-    learnFromUrls: protectedProcedure.input(z.object({
-      items: z.array(z.object({
-        itemName: z.string(),
-        productUrl: z.string(),
-        productName: z.string().optional(),
-        price: z.string().optional(),
-      })),
-    })).mutation(async ({ ctx, input }) => {
-      const results: Array<{
-        itemName: string;
-        platform: string;
-        productId: string;
-        productName: string;
-        status: "learned" | "failed";
-        reason?: string;
-      }> = [];
-
-      for (const item of input.items) {
-        try {
-          const parsed = parseProductUrl(item.productUrl);
-          if (!parsed) {
-            results.push({
-              itemName: item.itemName,
-              platform: "unknown",
-              productId: "",
-              productName: item.productName || item.itemName,
-              status: "failed",
-              reason: "Could not parse product ID from URL",
-            });
-            continue;
-          }
-
-          await db.upsertProductMapping({
-            userId: ctx.user.id,
-            itemName: item.itemName,
-            platform: parsed.platform,
-            productId: parsed.productId,
-            productName: item.productName || parsed.productName || item.itemName,
-            productUrl: item.productUrl,
-            lastPrice: item.price,
-            confidence: 100,
-            isVerified: true,
-          });
-
-          results.push({
-            itemName: item.itemName,
-            platform: parsed.platform,
-            productId: parsed.productId,
-            productName: item.productName || parsed.productName || item.itemName,
-            status: "learned",
-          });
-        } catch (e) {
-          results.push({
-            itemName: item.itemName,
-            platform: "unknown",
-            productId: "",
-            productName: item.productName || item.itemName,
-            status: "failed",
-            reason: e instanceof Error ? e.message : "Unknown error",
-          });
-        }
-      }
-
+    learnFromUrls: protectedProcedure.input(z.object({ items: z.array(z.object({ itemName: z.string(), productUrl: z.string(), productName: z.string().optional(), price: z.string().optional() })) })).mutation(async ({ ctx, input }) => {
+      const results: Array<{ itemName: string; platform: string; productId: string; productName: string; status: "learned" | "failed"; reason?: string }> = [];
+      for (const item of input.items) { try { const parsed = parseProductUrl(item.productUrl); if (!parsed) { results.push({ itemName: item.itemName, platform: "unknown", productId: "", productName: item.productName || item.itemName, status: "failed", reason: "Could not parse product ID from URL" }); continue; } await db.upsertProductMapping({ userId: ctx.user.id, itemName: item.itemName, platform: parsed.platform, productId: parsed.productId, productName: item.productName || parsed.productName || item.itemName, productUrl: item.productUrl, lastPrice: item.price, confidence: 100, isVerified: true }); results.push({ itemName: item.itemName, platform: parsed.platform, productId: parsed.productId, productName: item.productName || parsed.productName || item.itemName, status: "learned" }); } catch (e) { results.push({ itemName: item.itemName, platform: "unknown", productId: "", productName: item.productName || item.itemName, status: "failed", reason: e instanceof Error ? e.message : "Unknown error" }); } }
       const learned = results.filter(r => r.status === "learned").length;
       const failed = results.filter(r => r.status === "failed").length;
-
-      return {
-        results,
-        summary: {
-          total: input.items.length,
-          learned,
-          failed,
-          message: failed === 0
-            ? `Successfully learned ${learned} product mappings!`
-            : `Learned ${learned} of ${input.items.length} products. ${failed} could not be parsed.`,
-        },
-      };
+      return { results, summary: { total: input.items.length, learned, failed, message: failed === 0 ? `Successfully learned ${learned} product mappings!` : `Learned ${learned} of ${input.items.length} products. ${failed} could not be parsed.` } };
     }),
-
-    // ─── Auto-Learn from Session (post-checkout) ─────────────────
-    learnFromSession: protectedProcedure.input(z.object({
-      sessionId: z.number(),
-    })).mutation(async ({ ctx, input }) => {
+    learnFromSession: protectedProcedure.input(z.object({ sessionId: z.number() })).mutation(async ({ ctx, input }) => {
       const session = await db.getShoppingSession(input.sessionId, ctx.user.id);
       if (!session) throw new Error("Session not found");
-
       const items = await db.getSessionItems(input.sessionId);
-      const learnableItems = items.filter(i =>
-        i.matchedProductName && i.assignedPlatform &&
-        (i.status === "added_to_cart" || i.status === "found" || i.status === "substituted")
-      );
-
-      let learned = 0;
-      let skipped = 0;
+      const learnableItems = items.filter(i => i.matchedProductName && i.assignedPlatform && (i.status === "added_to_cart" || i.status === "found" || i.status === "substituted"));
+      let learned = 0; let skipped = 0;
       const newMappings: Array<{ itemName: string; productName: string; platform: string }> = [];
-
-      for (const item of learnableItems) {
-        // Try to extract product ID from the matched product URL or name
-        let productId: string | null = null;
-        let platform = (item.assignedPlatform || "walmart").toLowerCase();
-
-        // If item has a product URL, parse the ID from it
-        if (item.matchedProductUrl) {
-          const parsed = parseProductUrl(item.matchedProductUrl);
-          if (parsed) {
-            productId = parsed.productId;
-            platform = parsed.platform;
-          }
-        }
-
-        // If we still don't have a product ID, try to extract from matchedProductName
-        // Some session items may have been updated with product IDs directly
-        if (!productId && item.matchedProductName) {
-          // Check if there's already a mapping for this item
-          const existing = await db.findProductMapping(ctx.user.id, item.name, platform);
-          if (existing) {
-            skipped++;
-            continue;
-          }
-        }
-
-        if (!productId) {
-          skipped++;
-          continue;
-        }
-
-        await db.upsertProductMapping({
-          userId: ctx.user.id,
-          itemName: item.name,
-          platform,
-          productId,
-          productName: item.matchedProductName || item.name,
-          productUrl: item.matchedProductUrl || undefined,
-          lastPrice: item.matchedPrice?.toString() || undefined,
-          confidence: item.status === "substituted" ? 70 : 100,
-          isVerified: item.status !== "substituted",
-        });
-
-        learned++;
-        newMappings.push({
-          itemName: item.name,
-          productName: item.matchedProductName || item.name,
-          platform,
-        });
-      }
-
-      return {
-        sessionId: input.sessionId,
-        totalItems: items.length,
-        learnableItems: learnableItems.length,
-        learned,
-        skipped,
-        newMappings,
-        message: learned > 0
-          ? `Learned ${learned} new product mappings from this session!`
-          : "No new products to learn from this session.",
-      };
+      for (const item of learnableItems) { let productId: string | null = null; let platform = (item.assignedPlatform || "walmart").toLowerCase(); if (item.matchedProductUrl) { const parsed = parseProductUrl(item.matchedProductUrl); if (parsed) { productId = parsed.productId; platform = parsed.platform; } } if (!productId && item.matchedProductName) { const existing = await db.findProductMapping(ctx.user.id, item.name, platform); if (existing) { skipped++; continue; } } if (!productId) { skipped++; continue; } await db.upsertProductMapping({ userId: ctx.user.id, itemName: item.name, platform, productId, productName: item.matchedProductName || item.name, productUrl: item.matchedProductUrl || undefined, lastPrice: item.matchedPrice?.toString() || undefined, confidence: item.status === "substituted" ? 70 : 100, isVerified: item.status !== "substituted" }); learned++; newMappings.push({ itemName: item.name, productName: item.matchedProductName || item.name, platform }); }
+      return { sessionId: input.sessionId, totalItems: items.length, learnableItems: learnableItems.length, learned, skipped, newMappings, message: learned > 0 ? `Learned ${learned} new product mappings!` : "No new products to learn." };
     }),
   }),
 
-  // ─── Geeves Chat ──────────────────────────────────────────────────
   geeves: geevesRouter,
-  // ─── Receipt Upload (v2) ────────────────────────────────────────────
+
   receipts2: router({
-    upload: protectedProcedure.input(z.object({
-      transactionId: z.number(),
-      fileBase64: z.string(),
-      fileName: z.string(),
-      mimeType: z.string(),
-    })).mutation(async ({ ctx, input }) => {
+    upload: protectedProcedure.input(z.object({ transactionId: z.number(), fileBase64: z.string(), fileName: z.string(), mimeType: z.string() })).mutation(async ({ ctx, input }) => {
       const buffer = Buffer.from(input.fileBase64, "base64");
       const fileKey = `receipts/${ctx.user.id}/${input.transactionId}-${nanoid(8)}-${input.fileName}`;
       const { url } = await storagePut(fileKey, buffer, input.mimeType);
@@ -1695,119 +727,30 @@ Return JSON with:
     }),
   }),
 
-  // ─── Handwritten List Scanner ─────────────────────────────────────
   listScanner: router({
-    // Upload image and parse handwritten shopping list using AI vision
-    scan: protectedProcedure.input(z.object({
-      imageBase64: z.string(),
-      fileName: z.string(),
-      mimeType: z.string(),
-    })).mutation(async ({ ctx, input }) => {
-      // 1. Upload image to S3
+    scan: protectedProcedure.input(z.object({ imageBase64: z.string(), fileName: z.string(), mimeType: z.string() })).mutation(async ({ ctx, input }) => {
       const buffer = Buffer.from(input.imageBase64, "base64");
       const fileKey = `list-scans/${ctx.user.id}/${nanoid(12)}-${input.fileName}`;
       const { url: imageUrl } = await storagePut(fileKey, buffer, input.mimeType);
-
-      // 2. Use LLM vision to read the handwritten list
       const response = await invokeLLM({
         messages: [
-          {
-            role: "system",
-            content: `You are a shopping list reader. You receive an image of a handwritten shopping list. Extract every item from the list and return structured JSON. For each item, determine:
-- name: the product name (be specific, include brand if visible)
-- quantity: number (default 1 if not specified)
-- unit: unit of measurement if specified (e.g., "lb", "oz", "pack", "gallon") or null
-- category: one of "groceries", "household", "personal_care", "clothing", "electronics", "kids", "office", "other"
-- notes: any additional context written next to the item, or null
-
-Be thorough — capture every item even if handwriting is difficult to read. Make your best guess for unclear words based on common grocery/shopping items. If a quantity is written (like "x2" or "3" next to an item), capture it.`,
-          },
-          {
-            role: "user",
-            content: [
-              { type: "text", text: "Please read this handwritten shopping list and extract all items:" },
-              { type: "image_url", image_url: { url: imageUrl, detail: "high" } },
-            ],
-          },
+          { role: "system", content: `You are a shopping list reader.` },
+          { role: "user", content: [{ type: "text", text: "Please read this handwritten shopping list:" }, { type: "image_url", image_url: { url: imageUrl, detail: "high" } }] },
         ],
-        response_format: {
-          type: "json_schema",
-          json_schema: {
-            name: "scanned_shopping_list",
-            strict: true,
-            schema: {
-              type: "object",
-              properties: {
-                items: {
-                  type: "array",
-                  items: {
-                    type: "object",
-                    properties: {
-                      name: { type: "string", description: "Product name" },
-                      quantity: { type: "number", description: "Quantity needed" },
-                      unit: { type: ["string", "null"], description: "Unit of measurement" },
-                      category: { type: "string", description: "Item category" },
-                      notes: { type: ["string", "null"], description: "Additional notes" },
-                    },
-                    required: ["name", "quantity", "unit", "category", "notes"],
-                    additionalProperties: false,
-                  },
-                },
-                confidence: { type: "number", description: "Overall confidence in reading accuracy 0-100" },
-                rawText: { type: "string", description: "Best attempt at raw transcription of the handwritten text" },
-              },
-              required: ["items", "confidence", "rawText"],
-              additionalProperties: false,
-            },
-          },
-        },
+        response_format: { type: "json_schema", json_schema: { name: "scanned_shopping_list", strict: true, schema: { type: "object", properties: { items: { type: "array", items: { type: "object", properties: { name: { type: "string" }, quantity: { type: "number" }, unit: { type: ["string", "null"] }, category: { type: "string" }, notes: { type: ["string", "null"] } }, required: ["name", "quantity", "unit", "category", "notes"], additionalProperties: false } }, confidence: { type: "number" }, rawText: { type: "string" } }, required: ["items", "confidence", "rawText"], additionalProperties: false } } },
       });
-
       const content = response.choices[0]?.message?.content;
       const parsed = typeof content === "string" ? JSON.parse(content) : { items: [], confidence: 0, rawText: "" };
-
-      return {
-        imageUrl,
-        items: parsed.items,
-        confidence: parsed.confidence,
-        rawText: parsed.rawText,
-      };
+      return { imageUrl, items: parsed.items, confidence: parsed.confidence, rawText: parsed.rawText };
     }),
-
-    // Add scanned items to a shopping list
-    addToList: protectedProcedure.input(z.object({
-      listId: z.number(),
-      items: z.array(z.object({
-        name: z.string().min(1),
-        quantity: z.number().default(1),
-        unit: z.string().nullable().optional(),
-        category: z.string().nullable().optional(),
-        notes: z.string().nullable().optional(),
-      })),
-    })).mutation(async ({ ctx, input }) => {
-      // Verify list belongs to user
+    addToList: protectedProcedure.input(z.object({ listId: z.number(), items: z.array(z.object({ name: z.string().min(1), quantity: z.number().default(1), unit: z.string().nullable().optional(), category: z.string().nullable().optional(), notes: z.string().nullable().optional() })) })).mutation(async ({ ctx, input }) => {
       const list = await db.getShoppingListById(input.listId, ctx.user.id);
       if (!list) throw new Error("Shopping list not found or access denied");
-
-      // Add each item to the list
-      const created = [];
-      for (const item of input.items) {
-        const result = await db.createShoppingListItem({
-          listId: input.listId,
-          name: item.name,
-          quantity: item.quantity,
-          unit: item.unit || null,
-          category: item.category || null,
-          notes: item.notes || null,
-        });
-        created.push(result);
-      }
-
-      return { addedCount: created.length, listId: input.listId };
+      let added = 0;
+      for (const item of input.items) { await db.createShoppingListItem({ listId: input.listId, name: item.name, quantity: item.quantity, unit: item.unit || null, category: item.category || null, notes: item.notes || null }); added++; }
+      return { addedCount: added, listId: input.listId };
     }),
   }),
 });
 
 export type AppRouter = typeof appRouter;
-import { onboardingRouter } from "./routers/onboarding";
-import { platformConfigRouter } from "./routers/platformConfig";
