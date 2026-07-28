@@ -14,7 +14,7 @@
 
 import { getValidAccessToken } from "./intuitOAuth";
 import { QBO_API_BASE } from "./intuitOAuth";
-import * as db from "../db";
+import * as db from "./db";
 
 // ─── Rate Limiting ────────────────────────────────────────────────────────────
 
@@ -164,7 +164,7 @@ export async function syncChartOfAccounts(realmId: string): Promise<{ inserted: 
   const dbInstance = await db.getDb();
   if (!dbInstance) throw new Error("Database not available");
 
-  const { qboAccounts } = await import("../drizzle/schema");
+  const { qboAccounts } = await import("./drizzle/schema");
   const { eq, and } = await import("drizzle-orm");
   let inserted = 0;
   let updated = 0;
@@ -310,7 +310,7 @@ async function journalWrite(
   try {
     const dbInstance = await db.getDb();
     if (!dbInstance) return;
-    const { qboWriteAudit } = await import("../drizzle/schema");
+    const { qboWriteAudit } = await import("./drizzle/schema");
     await dbInstance.insert(qboWriteAudit).values({
       id: crypto.randomUUID(),
       realmId,
