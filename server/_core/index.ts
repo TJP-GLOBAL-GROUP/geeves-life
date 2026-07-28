@@ -9,6 +9,7 @@ import { createContext } from "./context";
 import { serveStatic, setupVite } from "./vite";
 import { setupGoogleOAuth } from "../auth/googleOAuth";
 import { setupGoogleAccountConnect } from "../auth/googleAccountConnect";
+import { setupIntuitOAuth } from "../intuitOAuth";
 import { setupRealtime } from "../realtime";
 import { setupCalendarWebhook, registerAllWebhooks } from "../services/calendarWebhook";
 import { knowledgeReviewHandler } from "../scheduledHandlers/knowledgeReview";
@@ -128,6 +129,8 @@ async function startServer() {
   setupGoogleOAuth(app);
   // Google account connect routes (add additional Google accounts to existing session)
   setupGoogleAccountConnect(app);
+  // Intuit/QBO OAuth routes (skips if QBO_CLIENT_ID not configured)
+  setupIntuitOAuth(app);
   // Google Calendar webhook endpoint
   setupCalendarWebhook(app);
   // Scheduled: 24h knowledge base review (heartbeat cron)
@@ -231,12 +234,12 @@ async function startServer() {
   app.post("/api/admin/system-reports/weekly", weeklyReportHandler);
   // Socket.io real-time
   setupRealtime(server);
+  // GCS storage proxy (must be registered before tRPC)
+  registerStorageProxy(app);
   // tRPC API
   app.use(
     "/api/trpc",
-registerStorageProxy(app);
-
-      createExpressMiddleware({
+    createExpressMiddleware({
       router: appRouter,
       createContext,
     })
