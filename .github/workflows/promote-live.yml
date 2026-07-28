@@ -56,8 +56,8 @@ jobs:
             --region "$GCP_REGION" --platform managed --allow-unauthenticated \
             --port 8080 --memory 1Gi --min-instances 1 --max-instances 5 \
             --service-account "$LIVE_SERVICE-runtime@$GCP_PROJECT_ID.iam.gserviceaccount.com" \
-            --set-env-vars "NODE_ENV=production,APP_URL=https://geeves.life,VITE_APP_URL=https://geeves.life,VITE_APP_ID=geeves,GCS_PROJECT_ID=$GCP_PROJECT_ID,GCS_BUCKET_UPLOADS=geeves-live-uploads,GCS_BUCKET_BACKUPS=geeves-live-backups,GCS_BUCKET_EXPORTS=geeves-live-exports,GUARDIAN_ENABLED=true,GUARDIAN_ALERT_EMAIL=tarik@geeves.life" \
-            --set-secrets "DATABASE_URL=geeves-live-database-url:latest,EDIT_SECRET=geeves-live-edit-secret:latest,SYSTEM_CRON_SECRET=geeves-live-cron-secret:latest,JWT_SECRET=geeves-live-jwt-secret:latest,RESEND_API_KEY=geeves-live-resend-api-key:latest"
+            --set-env-vars "NODE_ENV=production,APP_URL=https://geeves.life,VITE_APP_URL=https://geeves.life,VITE_APP_ID=8LgLCZ74b6FfUR3gEypAGn,GCS_PROJECT_ID=$GCP_PROJECT_ID,GCS_BUCKET_NAME=geeves-live-uploads,OAUTH_SERVER_URL=https://api.manus.im,BUILT_IN_FORGE_API_URL=https://forge.manus.ai,VITE_FRONTEND_FORGE_API_URL=https://forge.manus.ai,GUARDIAN_ENABLED=true,GUARDIAN_ALERT_EMAIL=tarik@geeves.life" \
+            --set-secrets "DATABASE_URL=geeves-live-database-url:latest,EDIT_SECRET=geeves-live-edit-secret:latest,SYSTEM_CRON_SECRET=geeves-live-cron-secret:latest,JWT_SECRET=geeves-live-jwt-secret:latest,RESEND_API_KEY=geeves-live-resend-api-key:latest,GOOGLE_APPLICATION_CREDENTIALS_JSON=geeves-gcs-credentials:latest,GOOGLE_CLIENT_ID=geeves-google-client-id:latest,GOOGLE_CLIENT_SECRET=geeves-google-client-secret:latest,BUILT_IN_FORGE_API_KEY=geeves-forge-api-key:latest,VITE_FRONTEND_FORGE_API_KEY=geeves-frontend-forge-api-key:latest"
 
       - name: Smoke check
         run: |
