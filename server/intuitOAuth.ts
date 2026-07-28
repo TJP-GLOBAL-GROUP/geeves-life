@@ -24,7 +24,7 @@ import { randomBytes } from "crypto";
 import { nanoid } from "nanoid";
 import { registerNonce, verifyAndConsumeNonce } from "./auth/nonceStore";
 import * as db from "./db";
-import { sdk } from "./sdk";
+import { sdk } from "./_core/sdk";
 import { decryptToken } from "./tokenEncryption";
 
 const INTUIT_AUTH_URL = "https://appcenter.intuit.com/connect/oauth2";
