@@ -97,6 +97,30 @@ function getProvider(): IntuitAuthProvider | null {
 
 function generateNonce(): string { return randomBytes(16).toString("hex"); }
 
+/**
+ * Generate an Intuit OAuth connect URL for the given origin, return path,
+ * and purposes. Used by the tRPC router (qboRouter) to initiate QBO
+ * connections from the frontend.
+ */
+export async function getConnectUrl(
+  origin: string,
+  returnPath: string,
+  purposes: QBOPurpose[]
+): Promise<string> {
+  const provider = getProvider();
+  if (!provider) throw new Error("QBO OAuth not configured");
+  const nonce = generateNonce();
+  await registerNonce(nonce);
+  const state = Buffer.from(JSON.stringify({
+    origin,
+    returnPath,
+    action: "connect_account",
+    purposes,
+    nonce,
+  })).toString("base64url");
+  return provider.getAuthorizationUrl(state, `${origin}/api/auth/intuit/callback`);
+}
+
 export function setupIntuitOAuth(app: Express) {
   const provider = getProvider();
   if (!provider) return;
