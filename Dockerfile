@@ -4,6 +4,7 @@ FROM node:22-slim AS build
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9 --activate
 COPY package.json pnpm-lock.yaml ./
+COPY patches ./patches
 RUN pnpm install --frozen-lockfile || pnpm install
 COPY . .
 # vite build (client) + esbuild server/_core/index.ts --packages=external (server)
@@ -16,6 +17,7 @@ FROM node:22-slim
 WORKDIR /app
 RUN corepack enable && corepack prepare pnpm@9 --activate
 COPY package.json pnpm-lock.yaml ./
+COPY patches ./patches
 RUN pnpm install --prod --frozen-lockfile || pnpm install --prod
 COPY --from=build /app/dist ./dist
 ENV NODE_ENV=production
