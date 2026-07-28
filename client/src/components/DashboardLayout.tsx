@@ -79,6 +79,13 @@ const topNavItems: NavItem[] = [
     activeClass: "bg-[#2AAFA9]/10",
   },
   {
+    icon: ClipboardList,
+    label: "Recon Explorer",
+    path: "/recon",
+    color: "#8B5CF6",
+    activeClass: "bg-[#8B5CF6]/10",
+  },
+  {
     icon: Calendar,
     label: "Calendar",
     path: "/calendar",

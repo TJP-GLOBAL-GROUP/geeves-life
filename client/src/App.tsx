@@ -33,6 +33,7 @@ import ConstellationMembers from "@/pages/ConstellationMembers";
 import { Redirect } from "wouter";
 import CustomRoles from "@/pages/CustomRoles";
 import ExpenseCategorisation from "@/pages/ExpenseCategorisation";
+import ReconExplorer from "@/pages/ReconExplorer";
 import PrivacyPolicy from "@/pages/PrivacyPolicy";
 import TermsOfService from "@/pages/TermsOfService";
 import Landing from "@/pages/Landing";
@@ -62,6 +63,7 @@ function Router() {
         <Route path="/orders" component={Orders} />
         <Route path="/accounts" component={Accounts} />
         <Route path="/expenses" component={Expenses} />
+        <Route path="/recon" component={ReconExplorer} />
         {/* /family is deprecated — redirect to Constellation Members */}
         <Route path="/family">{() => <Redirect to="/constellation-members" />}</Route>
         <Route path="/family/views">{() => <Redirect to="/constellation-members" />}</Route>
