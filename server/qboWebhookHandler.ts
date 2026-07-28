@@ -17,7 +17,7 @@
 
 import type { Request, Response } from "express";
 import { createHmac, timingSafeEqual } from "crypto";
-import * as db from "../db";
+import * as db from "./db";
 import { syncChartOfAccounts } from "./qboApiClient";
 
 // ─── Signature Verification ───────────────────────────────────────────────────
@@ -116,7 +116,7 @@ async function handlePurchaseChange(event: IntuitWebhookEvent): Promise<void> {
   // If so, update the sync queue status
   const dbInstance = await db.getDb();
   if (!dbInstance) return;
-  const { qboTransactionSyncQueue } = await import("../drizzle/schema");
+  const { qboTransactionSyncQueue } = await import("./drizzle/schema");
   const { eq } = await import("drizzle-orm");
   await dbInstance
     .update(qboTransactionSyncQueue)
