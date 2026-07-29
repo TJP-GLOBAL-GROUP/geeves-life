@@ -21,8 +21,7 @@ WORKDIR /app
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/start.mjs ./start.mjs
 ENV NODE_ENV=production
 # Cloud Run injects PORT (default 8080); server binds 0.0.0.0:$PORT.
 EXPOSE 8080
-CMD ["node", "start.mjs"]
+CMD ["node", "dist/index.js"]
