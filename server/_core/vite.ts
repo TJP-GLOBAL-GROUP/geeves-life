@@ -3,26 +3,26 @@ import fs from "fs";
 import { type Server } from "http";
 import { nanoid } from "nanoid";
 import path from "path";
+import { createRequire } from "module";
 
-// NOTE (Cloud Run fix): `vite` and `../../vite.config` are imported DYNAMICALLY
-// inside setupVite. vite.config pulls in devDependencies (e.g.
-// @builder.io/vite-plugin-jsx-loc) which are not installed in the production
-// image — static imports here crashed the container at boot with
-// ERR_MODULE_NOT_FOUND even though production never runs the Vite dev server.
+// NOTE (Cloud Run fix, hardened 2026-07-28): `vite` and `vite.config` must NOT
+// appear in the production bundle at all — not even as dynamic import(), which
+// esbuild can hoist/code-split into a statically-loaded chunk that crashes the
+// container at boot with ERR_MODULE_NOT_FOUND (vite is a devDependency).
+// We therefore resolve vite at RUNTIME via createRequire, which esbuild cannot
+// trace. This code path only ever executes in development.
 
 export async function setupVite(app: Express, server: Server) {
-  const { createServer: createViteServer } = await import("vite");
-  const { default: viteConfig } = await import("../../vite.config");
-  const serverOptions = {
-    middlewareMode: true,
-    hmr: { server },
-    allowedHosts: true as const,
-  };
-
+  const require = createRequire(import.meta.url);
+  const { createServer: createViteServer } = require("vite");
+  const configFile = path.resolve(import.meta.dirname, "../..", "vite.config.ts");
   const vite = await createViteServer({
-    ...viteConfig,
-    configFile: false,
-    server: serverOptions,
+    configFile,
+    server: {
+      middlewareMode: true,
+      hmr: { server },
+      allowedHosts: true as const,
+    },
     appType: "custom",
   });
 
