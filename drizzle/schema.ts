@@ -1,3 +1,1136 @@
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, decimal, boolean, json, bigint, uniqueIndex, index } from "drizzle-orm/mysql-core";
+
+// ═══════════════════════════════════════════════════════════════════════
+// EXISTING SHOPPING MODULE TABLES
+// ═══════════════════════════════════════════════════════════════════════
+
+export const users = mysqlTable("users", {
+  id: int("id").autoincrement().primaryKey(),
+  openId: varchar("openId", { length: 64 }).notNull().unique(),
+  name: text("name"),
+  email: varchar("email", { length: 320 }),
+  loginMethod: varchar("loginMethod", { length: 64 }),
+  role: mysqlEnum("role", ["user", "system_admin"]).default("user").notNull(),
+  householdId: varchar("householdId", { length: 36 }),
+  memberId: varchar("memberId", { length: 36 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  lastSignedIn: timestamp("lastSignedIn").defaultNow().notNull(),
+  /** IANA timezone string from the user's device (e.g. "America/New_York"). Updated on every login/app load. */
+  deviceTimezone: varchar("deviceTimezone", { length: 64 }),
+  /** Human-readable city name resolved from device geolocation (optional). */
+  deviceCity: varchar("deviceCity", { length: 128 }),
+});
+export type User = typeof users.$inferSelect;
+export type InsertUser = typeof users.$inferInsert;
+
+export const familyMembers = mysqlTable("family_members", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  relationship: varchar("relationship", { length: 100 }).notNull(),
+  avatarUrl: text("avatarUrl"),
+  clothingSizes: json("clothingSizes"),
+  dietaryRestrictions: json("dietaryRestrictions"),
+  preferences: json("preferences"),
+  birthDate: varchar("birthDate", { length: 10 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type FamilyMember = typeof familyMembers.$inferSelect;
+export type InsertFamilyMember = typeof familyMembers.$inferInsert;
+
+export const shoppingLists = mysqlTable("shopping_lists", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  description: text("description"),
+  category: varchar("category", { length: 100 }),
+  status: mysqlEnum("status", ["active", "completed", "archived"]).default("active").notNull(),
+  isRecurring: boolean("isRecurring").default(false),
+  recurringSchedule: varchar("recurringSchedule", { length: 100 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ShoppingList = typeof shoppingLists.$inferSelect;
+export type InsertShoppingList = typeof shoppingLists.$inferInsert;
+
+export const shoppingListItems = mysqlTable("shopping_list_items", {
+  id: int("id").autoincrement().primaryKey(),
+  listId: int("listId").notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  quantity: int("quantity").default(1),
+  unit: varchar("unit", { length: 50 }),
+  category: varchar("category", { length: 100 }),
+  notes: text("notes"),
+  estimatedPrice: decimal("estimatedPrice", { precision: 10, scale: 2 }),
+  currency: varchar("currency", { length: 3 }).default("USD"),
+  preferredStore: varchar("preferredStore", { length: 100 }),
+  productUrl: text("productUrl"),
+  status: mysqlEnum("status", ["pending", "purchased", "skipped"]).default("pending").notNull(),
+  forFamilyMemberId: int("forFamilyMemberId"),
+  purchasedAt: timestamp("purchasedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ShoppingListItem = typeof shoppingListItems.$inferSelect;
+export type InsertShoppingListItem = typeof shoppingListItems.$inferInsert;
+
+export const bankAccounts = mysqlTable("bank_accounts", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  householdId: varchar("householdId", { length: 36 }),
+  institution: varchar("institution", { length: 255 }).notNull(),
+  accountName: varchar("accountName", { length: 255 }).notNull(),
+  accountType: mysqlEnum("accountType", ["checking", "savings", "credit_card", "business_checking", "business_savings", "business_credit"]).notNull(),
+  category: mysqlEnum("category", ["personal", "business"]).default("personal").notNull(),
+  currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+  lastFourDigits: varchar("lastFourDigits", { length: 4 }),
+  currentBalance: decimal("currentBalance", { precision: 12, scale: 2 }).default("0"),
+  verticalId: varchar("verticalId", { length: 36 }),
+  isActive: boolean("isActive").default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type BankAccount = typeof bankAccounts.$inferSelect;
+export type InsertBankAccount = typeof bankAccounts.$inferInsert;
+
+export const transactions = mysqlTable("transactions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  bankAccountId: int("bankAccountId"),
+  description: varchar("description", { length: 500 }).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+  exchangeRate: decimal("exchangeRate", { precision: 10, scale: 4 }),
+  type: mysqlEnum("type", ["expense", "income", "transfer"]).default("expense").notNull(),
+  expenseCategory: varchar("expenseCategory", { length: 100 }),
+  classification: mysqlEnum("classification", ["personal", "business"]).default("personal").notNull(),
+  aiConfidence: int("aiConfidence"),
+  isManualOverride: boolean("isManualOverride").default(false),
+  vendor: varchar("vendor", { length: 255 }),
+  platform: varchar("platform", { length: 100 }),
+  receiptUrl: text("receiptUrl"),
+  notes: text("notes"),
+  isTaxDeductible: boolean("isTaxDeductible").default(false),
+  taxCategory: varchar("taxCategory", { length: 100 }),
+  transactionDate: timestamp("transactionDate").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Transaction = typeof transactions.$inferSelect;
+export type InsertTransaction = typeof transactions.$inferInsert;
+
+export const orders = mysqlTable("orders", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  platform: varchar("platform", { length: 100 }).notNull(),
+  orderNumber: varchar("orderNumber", { length: 255 }),
+  vendor: varchar("vendor", { length: 255 }),
+  totalAmount: decimal("totalAmount", { precision: 12, scale: 2 }),
+  currency: varchar("currency", { length: 3 }).default("USD"),
+  status: mysqlEnum("status", ["pending", "shipped", "delivered", "cancelled", "returned"]).default("pending").notNull(),
+  trackingNumber: varchar("trackingNumber", { length: 255 }),
+  items: json("items"),
+  importSource: mysqlEnum("importSource", ["email", "manual", "whatsapp"]).default("manual").notNull(),
+  orderDate: timestamp("orderDate").notNull(),
+  deliveryDate: timestamp("deliveryDate"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Order = typeof orders.$inferSelect;
+export type InsertOrder = typeof orders.$inferInsert;
+
+export const exchangeRates = mysqlTable("exchange_rates", {
+  id: int("id").autoincrement().primaryKey(),
+  fromCurrency: varchar("fromCurrency", { length: 3 }).notNull(),
+  toCurrency: varchar("toCurrency", { length: 3 }).notNull(),
+  rate: decimal("rate", { precision: 10, scale: 4 }).notNull(),
+  fetchedAt: timestamp("fetchedAt").defaultNow().notNull(),
+});
+export type ExchangeRate = typeof exchangeRates.$inferSelect;
+export type InsertExchangeRate = typeof exchangeRates.$inferInsert;
+
+export const whatsappImports = mysqlTable("whatsapp_imports", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  contactName: varchar("contactName", { length: 255 }),
+  rawMessage: text("rawMessage").notNull(),
+  parsedItems: json("parsedItems"),
+  shoppingListId: int("shoppingListId"),
+  importedAt: timestamp("importedAt").defaultNow().notNull(),
+});
+export type WhatsappImport = typeof whatsappImports.$inferSelect;
+export type InsertWhatsappImport = typeof whatsappImports.$inferInsert;
+
+export const shoppingSessions = mysqlTable("shopping_sessions", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  listId: int("listId").notNull(),
+  listName: varchar("listName", { length: 255 }).notNull(),
+  status: mysqlEnum("status", ["pending_credentials", "ready", "preparing", "shopping", "awaiting_review", "approved", "completed", "cancelled"]).default("ready").notNull(),
+  walmartTotal: decimal("walmartTotal", { precision: 12, scale: 2 }).default("0"),
+  amazonTotal: decimal("amazonTotal", { precision: 12, scale: 2 }).default("0"),
+  overallTotal: decimal("overallTotal", { precision: 12, scale: 2 }).default("0"),
+  deliveryInfo: json("deliveryInfo"),
+  totalItems: int("totalItems").default(0),
+  itemsFound: int("itemsFound").default(0),
+  itemsSubstituted: int("itemsSubstituted").default(0),
+  itemsUnavailable: int("itemsUnavailable").default(0),
+  itemsCrossTransferred: int("itemsCrossTransferred").default(0),
+  notifications: json("notifications"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ShoppingSession = typeof shoppingSessions.$inferSelect;
+export type InsertShoppingSession = typeof shoppingSessions.$inferInsert;
+
+export const shoppingSessionItems = mysqlTable("shopping_session_items", {
+  id: int("id").autoincrement().primaryKey(),
+  sessionId: int("sessionId").notNull(),
+  listItemId: int("listItemId"),
+  name: varchar("name", { length: 500 }).notNull(),
+  quantity: int("quantity").default(1),
+  unit: varchar("unit", { length: 50 }),
+  assignedPlatform: varchar("assignedPlatform", { length: 100 }).notNull(),
+  originalPlatform: varchar("originalPlatform", { length: 100 }),
+  status: mysqlEnum("status", ["queued", "searching", "found", "added_to_cart", "substituted", "unavailable", "transferred", "rejected"]).default("queued").notNull(),
+  matchedProductName: varchar("matchedProductName", { length: 500 }),
+  matchedProductUrl: text("matchedProductUrl"),
+  matchedPrice: decimal("matchedPrice", { precision: 10, scale: 2 }),
+  matchConfidence: int("matchConfidence"),
+  substitutionReason: text("substitutionReason"),
+  originalProductName: varchar("originalProductName", { length: 500 }),
+  transferReason: text("transferReason"),
+  estimatedDelivery: varchar("estimatedDelivery", { length: 255 }),
+  fulfillmentMethod: varchar("fulfillmentMethod", { length: 100 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ShoppingSessionItem = typeof shoppingSessionItems.$inferSelect;
+export type InsertShoppingSessionItem = typeof shoppingSessionItems.$inferInsert;
+
+export const platformCredentials = mysqlTable("platform_credentials", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  platform: varchar("platform", { length: 100 }).notNull(),
+  credentialData: json("credentialData"),
+  isActive: boolean("isActive").default(true),
+  lastUsed: timestamp("lastUsed"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PlatformCredential = typeof platformCredentials.$inferSelect;
+export type InsertPlatformCredential = typeof platformCredentials.$inferInsert;
+
+export const chatMessages = mysqlTable("chat_messages", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  role: mysqlEnum("role", ["user", "assistant", "system"]).notNull(),
+  content: text("content").notNull(),
+  metadata: json("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type InsertChatMessage = typeof chatMessages.$inferInsert;
+
+export const productMappings = mysqlTable("product_mappings", {
+  id: int("id").autoincrement().primaryKey(),
+  userId: int("userId").notNull(),
+  itemName: varchar("itemName", { length: 500 }).notNull(),
+  normalizedName: varchar("normalizedName", { length: 500 }).notNull(),
+  platform: varchar("platform", { length: 100 }).notNull(),
+  productId: varchar("productId", { length: 255 }).notNull(),
+  productName: varchar("productName", { length: 500 }).notNull(),
+  productUrl: text("productUrl"),
+  lastPrice: decimal("lastPrice", { precision: 10, scale: 2 }),
+  useCount: int("useCount").default(1),
+  confidence: int("confidence").default(80),
+  isVerified: boolean("isVerified").default(false),
+  lastAvailable: timestamp("lastAvailable"),
+  lastUsed: timestamp("lastUsed"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ProductMapping = typeof productMappings.$inferSelect;
+export type InsertProductMapping = typeof productMappings.$inferInsert;
+
+// ═══════════════════════════════════════════════════════════════════════
+// GEEVES LIFE — MULTI-TENANT CALENDAR & HOUSEHOLD OS TABLES
+// ═══════════════════════════════════════════════════════════════════════
+
+export const households = mysqlTable("households", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  name: varchar("name", { length: 255 }).notNull(),
+  createdByUserId: int("createdByUserId").notNull(),
+  wakeWord: varchar("wakeWord", { length: 100 }).default("Geeves"),
+  timezone: varchar("timezone", { length: 100 }).default("America/New_York").notNull(),
+  groupName: varchar("groupName", { length: 100 }).default("Household"),
+  settings: json("settings"),
+  eaCanManageAccess: boolean("eaCanManageAccess").default(true).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Household = typeof households.$inferSelect;
+export type InsertHousehold = typeof households.$inferInsert;
+
+export const householdMembers = mysqlTable("household_members", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  userId: int("userId"),
+  displayName: varchar("displayName", { length: 255 }).notNull(),
+  googleName: varchar("googleName", { length: 255 }),
+  email: varchar("email", { length: 320 }),
+  avatarUrl: text("avatarUrl"),
+  photoUrl: text("photoUrl"),
+  role: mysqlEnum("role", ["household_admin", "ea", "member", "caregiver", "child", "elder"]).default("member").notNull(),
+  pronouns: varchar("pronouns", { length: 100 }),
+  genderIdentity: varchar("genderIdentity", { length: 100 }),
+  relationshipLabel: varchar("relationshipLabel", { length: 100 }),
+  isBillingContact: boolean("isBillingContact").default(false),
+  accessibilityMode: mysqlEnum("accessibilityMode", ["standard", "picture_board", "large_text", "voice_only"]).default("standard"),
+  status: mysqlEnum("status", ["invited", "active", "inactive", "removed"]).default("invited").notNull(),
+  inviteToken: varchar("inviteToken", { length: 128 }),
+  inviteTokenExpiresAt: timestamp("inviteTokenExpiresAt"),
+  invitedAt: timestamp("invitedAt"),
+  joinedAt: timestamp("joinedAt"),
+  invitedByMemberId: varchar("invitedByMemberId", { length: 36 }),
+  customRoleId: varchar("customRoleId", { length: 36 }),
+  pendingVerticals: json("pendingVerticals").$type<string[]>().default([]),
+  geevesAccess: boolean("geevesAccess").default(true).notNull(),
+  dob: varchar("dob", { length: 10 }),
+  phoneNumbers: json("phoneNumbers").$type<Array<{ label: string; number: string }>>(),
+  clothingSizes: json("clothingSizes").$type<{ top?: string; bottom?: string; shoe?: string; dress?: string }>(),
+  dietaryRestrictions: text("dietaryRestrictions"),
+  memberPreferences: json("memberPreferences").$type<{ favoriteColors?: string[]; favoriteBrands?: string[]; notes?: string }>(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type HouseholdMember = typeof householdMembers.$inferSelect;
+export type InsertHouseholdMember = typeof householdMembers.$inferInsert;
+
+export const verticals = mysqlTable("verticals", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  icon: varchar("icon", { length: 100 }),
+  color: varchar("color", { length: 20 }),
+  description: text("description"),
+  isActive: boolean("isActive").default(true),
+  sortOrder: int("sortOrder").default(0),
+  ownerMemberId: varchar("ownerMemberId", { length: 36 }),
+  privacyLevel: mysqlEnum("privacyLevel", ["household", "admin_only", "private"]).default("household").notNull(),
+  busyLabel: varchar("busyLabel", { length: 50 }).default("Busy"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Vertical = typeof verticals.$inferSelect;
+export type InsertVertical = typeof verticals.$inferInsert;
+
+export const calendars = mysqlTable("calendars", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  memberId: varchar("memberId", { length: 36 }).notNull(),
+  verticalId: varchar("verticalId", { length: 36 }),
+  provider: mysqlEnum("provider", ["google_workspace", "google_personal", "ical", "manual"]).notNull(),
+  externalId: varchar("externalId", { length: 500 }),
+  accountEmail: varchar("accountEmail", { length: 320 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  color: varchar("color", { length: 20 }),
+  syncType: mysqlEnum("syncType", ["push", "poll", "manual"]).default("push").notNull(),
+  pollIntervalMinutes: int("pollIntervalMinutes").default(15),
+  syncToken: text("syncToken"),
+  lastSyncAt: timestamp("lastSyncAt"),
+  syncStatus: mysqlEnum("syncStatus", ["active", "error", "paused"]).default("active"),
+  syncError: text("syncError"),
+  accessLevel: mysqlEnum("accessLevel", ["read_write", "read_only", "free_busy"]).default("read_write").notNull(),
+  isPrimary: boolean("isPrimary").default(false),
+  isVisible: boolean("isVisible").default(true),
+  shadowBlocking: boolean("shadowBlocking").default(true),
+  shadowSource: boolean("shadowSource").default(true),
+  noGoogleWrite: boolean("noGoogleWrite").default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Calendar = typeof calendars.$inferSelect;
+export type InsertCalendar = typeof calendars.$inferInsert;
+
+export const events = mysqlTable("events", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  calendarId: varchar("calendarId", { length: 36 }).notNull(),
+  externalId: varchar("externalId", { length: 500 }),
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  location: varchar("location", { length: 500 }),
+  startTime: bigint("startTime", { mode: "number" }).notNull(),
+  endTime: bigint("endTime", { mode: "number" }).notNull(),
+  isAllDay: boolean("isAllDay").default(false),
+  recurrenceRule: text("recurrenceRule"),
+  recurringEventId: varchar("recurringEventId", { length: 36 }),
+  status: mysqlEnum("status", ["confirmed", "tentative", "cancelled"]).default("confirmed").notNull(),
+  visibility: mysqlEnum("visibility", ["default", "public", "private", "confidential"]).default("default"),
+  attendees: json("attendees"),
+  reminders: json("reminders"),
+  createdBy: varchar("createdBy", { length: 36 }),
+  lastModifiedBy: varchar("lastModifiedBy", { length: 36 }),
+  source: mysqlEnum("source", ["sync", "manual", "voice", "import", "shadow"]).default("sync"),
+  isShadowBlock: boolean("isShadowBlock").default(false),
+  version: int("version").default(1),
+  etag: varchar("etag", { length: 255 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  householdTimeIdx: index("events_household_time_idx").on(t.householdId, t.startTime, t.endTime),
+  calendarStartIdx: index("events_calendar_start_idx").on(t.calendarId, t.startTime),
+  calendarExternalUniq: uniqueIndex("events_calendar_external_uniq").on(t.calendarId, t.externalId),
+}));
+export type Event = typeof events.$inferSelect;
+export type InsertEvent = typeof events.$inferInsert;
+
+export const shadowBlocks = mysqlTable("shadow_blocks", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  sourceEventId: varchar("sourceEventId", { length: 36 }).notNull(),
+  sourceCalendarId: varchar("sourceCalendarId", { length: 36 }).notNull(),
+  targetCalendarId: varchar("targetCalendarId", { length: 36 }).notNull(),
+  maskedTitle: varchar("maskedTitle", { length: 500 }).default("Busy"),
+  startTime: bigint("startTime", { mode: "number" }),
+  endTime: bigint("endTime", { mode: "number" }),
+  isAllDay: boolean("isAllDay").default(false),
+  isDismissed: boolean("isDismissed").default(false),
+  dismissedAt: timestamp("dismissedAt"),
+  externalEventId: varchar("externalEventId", { length: 500 }),
+  syncStatus: mysqlEnum("sync_status", ["pending_sync", "synced", "sync_failed"]).notNull().default("pending_sync"),
+  syncAttempts: int("sync_attempts").notNull().default(0),
+  lastSyncError: text("last_sync_error"),
+  lastSyncAttemptAt: bigint("last_sync_attempt_at", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  uniqSourceTarget: uniqueIndex("shadow_blocks_source_target_uniq").on(t.sourceEventId, t.targetCalendarId),
+  householdTimeIdx: index("sb_household_time_idx").on(t.householdId, t.startTime, t.endTime),
+}));
+export type ShadowBlock = typeof shadowBlocks.$inferSelect;
+export type InsertShadowBlock = typeof shadowBlocks.$inferInsert;
+
+export const properties = mysqlTable("properties", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  address: text("address"),
+  type: mysqlEnum("type", ["primary_residence", "rental_str", "rental_ltr", "vacation", "commercial", "investment", "other"]).default("rental_str"),
+  icalUrl: text("icalUrl"),
+  calendarId: varchar("calendarId", { length: 36 }),
+  verticalId: varchar("verticalId", { length: 36 }),
+  propertyEmail: varchar("propertyEmail", { length: 320 }),
+  outboundIcsKey: text("outboundIcsKey"),
+  outboundIcsUrl: text("outboundIcsUrl"),
+  leaseDocUrl: text("leaseDocUrl"),
+  leaseDocKey: text("leaseDocKey"),
+  monthlyRent: decimal("monthlyRent", { precision: 12, scale: 2 }),
+  rentCurrency: varchar("rentCurrency", { length: 3 }).default("USD"),
+  settings: json("settings"),
+  latitude: decimal("latitude", { precision: 10, scale: 7 }),
+  longitude: decimal("longitude", { precision: 10, scale: 7 }),
+  country: varchar("country", { length: 2 }),
+  timezone: varchar("timezone", { length: 64 }).default("America/New_York"),
+  isActive: boolean("isActive").default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Property = typeof properties.$inferSelect;
+export type InsertProperty = typeof properties.$inferInsert;
+
+export const devices = mysqlTable("devices", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  propertyId: varchar("propertyId", { length: 36 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  type: mysqlEnum("type", ["lock", "camera", "thermostat", "hvac_puck", "light", "sensor", "other"]).notNull(),
+  provider: mysqlEnum("provider", ["seam", "flair", "manual"]).default("seam"),
+  externalId: varchar("externalId", { length: 255 }),
+  location: varchar("location", { length: 255 }),
+  currentState: json("currentState"),
+  status: mysqlEnum("status", ["online", "offline", "error", "setup"]).default("setup"),
+  lastSeenAt: timestamp("lastSeenAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Device = typeof devices.$inferSelect;
+export type InsertDevice = typeof devices.$inferInsert;
+
+export const notes = mysqlTable("notes", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  memberId: varchar("memberId", { length: 36 }).notNull(),
+  verticalId: varchar("verticalId", { length: 36 }),
+  eventId: varchar("eventId", { length: 36 }),
+  content: text("content").notNull(),
+  source: mysqlEnum("source", ["voice", "text", "tablet", "phone"]).default("text").notNull(),
+  reminderAt: bigint("reminderAt", { mode: "number" }),
+  isCompleted: boolean("isCompleted").default(false),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Note = typeof notes.$inferSelect;
+export type InsertNote = typeof notes.$inferInsert;
+
+export const oauthTokens = mysqlTable("oauth_tokens", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  memberId: varchar("memberId", { length: 36 }).notNull(),
+  provider: varchar("provider", { length: 50 }).notNull(),
+  accountEmail: varchar("accountEmail", { length: 320 }).notNull(),
+  accessToken: text("accessToken").notNull(),
+  refreshToken: text("refreshToken"),
+  expiresAt: bigint("expiresAt", { mode: "number" }),
+  scopes: text("scopes"),
+  purposes: json("purposes").$type<string[]>().default([]),
+  displayName: varchar("displayName", { length: 100 }),
+  status: mysqlEnum("status", ["active", "expired", "revoked"]).default("active"),
+  lastRefreshedAt: timestamp("lastRefreshedAt"),
+  expiredNotifiedAt: timestamp("expiredNotifiedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type OAuthToken = typeof oauthTokens.$inferSelect;
+export type InsertOAuthToken = typeof oauthTokens.$inferInsert;
+
+export const subscriptions = mysqlTable("subscriptions", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  plan: mysqlEnum("plan", ["free", "premium"]).default("free").notNull(),
+  seatsIncluded: int("seatsIncluded").default(5),
+  seatsUsed: int("seatsUsed").default(1),
+  additionalSeats: int("additionalSeats").default(0),
+  addOns: json("addOns"),
+  stripeCustomerId: varchar("stripeCustomerId", { length: 255 }),
+  stripeSubscriptionId: varchar("stripeSubscriptionId", { length: 255 }),
+  status: mysqlEnum("status", ["active", "past_due", "cancelled", "trialing"]).default("trialing").notNull(),
+  currentPeriodStart: bigint("currentPeriodStart", { mode: "number" }),
+  currentPeriodEnd: bigint("currentPeriodEnd", { mode: "number" }),
+  cancelledAt: timestamp("cancelledAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Subscription = typeof subscriptions.$inferSelect;
+export type InsertSubscription = typeof subscriptions.$inferInsert;
+
+export const webhookChannels = mysqlTable("webhook_channels", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  calendarId: varchar("calendarId", { length: 36 }).notNull(),
+  resourceId: varchar("resourceId", { length: 255 }),
+  resourceUri: text("resourceUri"),
+  notificationUrl: varchar("notificationUrl", { length: 512 }),
+  expiresAt: bigint("expiresAt", { mode: "number" }).notNull(),
+  token: varchar("token", { length: 255 }),
+  status: mysqlEnum("status", ["active", "expired", "stopped"]).default("active"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type WebhookChannel = typeof webhookChannels.$inferSelect;
+export type InsertWebhookChannel = typeof webhookChannels.$inferInsert;
+
+// ═══════════════════════════════════════════════════════════════════════
+// VERTICALS SYSTEM — Ownership, Integrations, Cross-Vertical Visibility
+// ═══════════════════════════════════════════════════════════════════════
+
+export const verticalOwners = mysqlTable("vertical_owners", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  verticalId: varchar("verticalId", { length: 36 }).notNull(),
+  userId: int("userId").notNull(),
+  role: mysqlEnum("role", ["owner", "member"]).default("owner").notNull(),
+  addedByUserId: int("addedByUserId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type VerticalOwner = typeof verticalOwners.$inferSelect;
+export type InsertVerticalOwner = typeof verticalOwners.$inferInsert;
+
+export const verticalIntegrations = mysqlTable("vertical_integrations", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  verticalId: varchar("verticalId", { length: 36 }).notNull(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  memberId: varchar("memberId", { length: 36 }).notNull(),
+  integrationType: mysqlEnum("integrationType", ["calendar", "email", "task", "security", "other"]).notNull(),
+  provider: varchar("provider", { length: 100 }).notNull(),
+  accountEmail: varchar("accountEmail", { length: 320 }),
+  displayName: varchar("displayName", { length: 255 }),
+  calendarId: varchar("calendarId", { length: 36 }),
+  status: mysqlEnum("status", ["active", "pending", "error", "disconnected"]).default("active").notNull(),
+  metadata: json("metadata"),
+  lastSyncAt: timestamp("lastSyncAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type VerticalIntegration = typeof verticalIntegrations.$inferSelect;
+export type InsertVerticalIntegration = typeof verticalIntegrations.$inferInsert;
+
+export const verticalVisibility = mysqlTable("vertical_visibility", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  fromVerticalId: varchar("fromVerticalId", { length: 36 }).notNull(),
+  toVerticalId: varchar("toVerticalId", { length: 36 }).notNull(),
+  visibilityLevel: mysqlEnum("visibilityLevel", ["none", "busy_only", "full"]).default("busy_only").notNull(),
+  busyLabel: varchar("busyLabel", { length: 50 }).default("Busy"),
+  calendarExclusions: json("calendarExclusions").$type<string[]>().default([]),
+  configuredByUserId: int("configuredByUserId"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type VerticalVisibility = typeof verticalVisibility.$inferSelect;
+export type InsertVerticalVisibility = typeof verticalVisibility.$inferInsert;
+
+export const shadowOverrides = mysqlTable("shadow_overrides", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  eventId: varchar("eventId", { length: 36 }).notNull(),
+  calendarId: varchar("calendarId", { length: 36 }).notNull(),
+  action: mysqlEnum("action", ["include", "exclude"]).notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type ShadowOverride = typeof shadowOverrides.$inferSelect;
+export type InsertShadowOverride = typeof shadowOverrides.$inferInsert;
+
+export const bookingRequests = mysqlTable("booking_requests", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  requestorMemberId: varchar("requestorMemberId", { length: 36 }).notNull(),
+  targetVerticalId: varchar("targetVerticalId", { length: 36 }).notNull(),
+  targetCalendarId: varchar("targetCalendarId", { length: 36 }),
+  title: varchar("title", { length: 500 }).notNull(),
+  description: text("description"),
+  location: varchar("location", { length: 500 }),
+  startTime: bigint("startTime", { mode: "number" }).notNull(),
+  endTime: bigint("endTime", { mode: "number" }).notNull(),
+  status: mysqlEnum("status", ["pending", "approved", "declined", "cancelled"]).default("pending").notNull(),
+  createdEventId: varchar("createdEventId", { length: 36 }),
+  responseNote: text("responseNote"),
+  respondedByMemberId: varchar("respondedByMemberId", { length: 36 }),
+  respondedAt: bigint("respondedAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type BookingRequest = typeof bookingRequests.$inferSelect;
+export type InsertBookingRequest = typeof bookingRequests.$inferInsert;
+
+export const propertyPlatforms = mysqlTable("property_platforms", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  propertyId: varchar("propertyId", { length: 36 }).notNull(),
+  platform: mysqlEnum("platform", ["airbnb", "vrbo", "booking_com", "direct", "zillow", "apartments_com", "other"]).notNull(),
+  displayName: varchar("displayName", { length: 255 }),
+  icalUrl: text("icalUrl").notNull(),
+  notificationEmail: varchar("notificationEmail", { length: 320 }),
+  emailScrapingEnabled: boolean("emailScrapingEnabled").default(false),
+  lastEmailScrapedAt: bigint("lastEmailScrapedAt", { mode: "number" }),
+  emailNotificationEmailPrev: varchar("emailNotificationEmailPrev", { length: 320 }),
+  lastPolledAt: bigint("lastPolledAt", { mode: "number" }),
+  lastError: text("lastError"),
+  isActive: boolean("isActive").default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PropertyPlatform = typeof propertyPlatforms.$inferSelect;
+export type InsertPropertyPlatform = typeof propertyPlatforms.$inferInsert;
+
+export const propertyPrepRules = mysqlTable("property_prep_rules", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  propertyId: varchar("propertyId", { length: 36 }).notNull(),
+  blockDaysBefore: int("blockDaysBefore").default(0).notNull(),
+  blockDaysAfter: int("blockDaysAfter").default(1).notNull(),
+  blockNationalHolidays: boolean("blockNationalHolidays").default(false),
+  blockSundays: boolean("blockSundays").default(false),
+  customBlockDates: json("customBlockDates"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PropertyPrepRule = typeof propertyPrepRules.$inferSelect;
+export type InsertPropertyPrepRule = typeof propertyPrepRules.$inferInsert;
+
+export const propertyBookings = mysqlTable("property_bookings", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  propertyId: varchar("propertyId", { length: 36 }).notNull(),
+  platformId: varchar("platformId", { length: 36 }).notNull(),
+  icalUid: varchar("icalUid", { length: 500 }),
+  bookingType: mysqlEnum("bookingType", ["booking", "block", "unavailable"]).default("booking").notNull(),
+  blockReason: varchar("blockReason", { length: 50 }),
+  summary: varchar("summary", { length: 500 }),
+  description: text("description"),
+  checkIn: bigint("checkIn", { mode: "number" }).notNull(),
+  checkOut: bigint("checkOut", { mode: "number" }).notNull(),
+  guestName: varchar("guestName", { length: 255 }),
+  guestEmail: varchar("guestEmail", { length: 320 }),
+  guestPhone: varchar("guestPhone", { length: 50 }),
+  confirmationNumber: varchar("confirmationNumber", { length: 50 }),
+  totalPrice: decimal("totalPrice", { precision: 12, scale: 2 }),
+  commissionAmount: decimal("commissionAmount", { precision: 12, scale: 2 }),
+  netAmount: decimal("netAmount", { precision: 12, scale: 2 }),
+  currency: varchar("currency", { length: 3 }).default("USD"),
+  taxRemittedByPlatform: decimal("taxRemittedByPlatform", { precision: 12, scale: 2 }),
+  taxOwedByHost: decimal("taxOwedByHost", { precision: 12, scale: 2 }),
+  taxJurisdiction: varchar("taxJurisdiction", { length: 50 }),
+  passThroughTax: decimal("passThroughTax", { precision: 12, scale: 2 }),
+  payoutDate: bigint("payoutDate", { mode: "number" }),
+  payoutBankAccount: varchar("payoutBankAccount", { length: 100 }),
+  financialSource: mysqlEnum("financialSource", [
+    "email_scrape", "platform_export", "manual", "screenshot_ocr", "channex_api"
+  ]),
+  revenueAmount: decimal("revenueAmount", { precision: 12, scale: 2 }),
+  revenueCurrency: varchar("revenueCurrency", { length: 3 }).default("USD"),
+  guestCount: int("guestCount"),
+  cleaningFee: decimal("cleaningFee", { precision: 12, scale: 2 }),
+  platformBookingUrl: text("platformBookingUrl"),
+  rawEmailSubject: varchar("rawEmailSubject", { length: 500 }),
+  rawEmailDate: bigint("rawEmailDate", { mode: "number" }),
+  emailScrapeSource: varchar("emailScrapeSource", { length: 64 }),
+  scrapeConfidence: int("scrapeConfidence"),
+  lastEnrichedAt: bigint("lastEnrichedAt", { mode: "number" }),
+  bookingStatus: mysqlEnum("bookingStatus", ["confirmed", "cancelled"]).default("confirmed").notNull(),
+  cancelledAt: bigint("cancelledAt", { mode: "number" }),
+  cancellationSource: varchar("cancellationSource", { length: 64 }),
+  hasConflict: boolean("hasConflict").default(false),
+  conflictWith: varchar("conflictWith", { length: 36 }),
+  dataSource: mysqlEnum("dataSource", ["ical_only", "email_only", "both"]).default("ical_only").notNull(),
+  emailCheckIn: bigint("emailCheckIn", { mode: "number" }),
+  emailCheckOut: bigint("emailCheckOut", { mode: "number" }),
+  pendingCancellationSource: varchar("pendingCancellationSource", { length: 10 }),
+  pendingCancellationAt: bigint("pendingCancellationAt", { mode: "number" }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  propertyIdCheckInIdx: index("pb_propertyId_checkIn_idx").on(t.propertyId, t.checkIn),
+  platformIdIdx: index("pb_platformId_idx").on(t.platformId),
+  icalUidIdx: index("pb_icalUid_idx").on(t.icalUid),
+}));
+export type PropertyBooking = typeof propertyBookings.$inferSelect;
+export type InsertPropertyBooking = typeof propertyBookings.$inferInsert;
+
+export const syncLog = mysqlTable("sync_log", {
+  id: int("id").autoincrement().primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  calendarId: varchar("calendarId", { length: 36 }).notNull(),
+  action: mysqlEnum("action", ["full_sync", "incremental_sync", "webhook_received", "event_created", "event_updated", "event_deleted", "shadow_created", "shadow_dismissed", "conflict_resolved", "error"]).notNull(),
+  details: json("details"),
+  eventsAffected: int("eventsAffected").default(0),
+  errorMessage: text("errorMessage"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type SyncLogEntry = typeof syncLog.$inferSelect;
+export type InsertSyncLogEntry = typeof syncLog.$inferInsert;
+
+export const projectKnowledge = mysqlTable("project_knowledge", {
+  id: int("id").autoincrement().primaryKey(),
+  category: varchar("category", { length: 64 }).notNull(),
+  key: varchar("key", { length: 128 }).notNull(),
+  value: text("value").notNull(),
+  sourceDoc: varchar("sourceDoc", { length: 256 }),
+  notes: text("notes"),
+  lastReviewedAt: timestamp("lastReviewedAt"),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type ProjectKnowledge = typeof projectKnowledge.$inferSelect;
+export type InsertProjectKnowledge = typeof projectKnowledge.$inferInsert;
+
+export const bookingOverrides = mysqlTable("booking_overrides", {
+  id: varchar("id", { length: 36 }).primaryKey(),
+  bookingId: varchar("bookingId", { length: 36 }).notNull(),
+  guestName: varchar("guestName", { length: 255 }),
+  guestEmail: varchar("guestEmail", { length: 320 }),
+  notes: text("notes"),
+  createdBy: varchar("createdBy", { length: 36 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type BookingOverride = typeof bookingOverrides.$inferSelect;
+export type InsertBookingOverride = typeof bookingOverrides.$inferInsert;
+
+export const auditLog = mysqlTable("audit_log", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  actorUserId: int("actorUserId"),
+  actorOpenId: varchar("actorOpenId", { length: 64 }),
+  actorEmail: varchar("actorEmail", { length: 320 }),
+  actorName: varchar("actorName", { length: 255 }),
+  actorType: mysqlEnum("actorType", ["user", "system", "geeves_ai", "scheduled_job", "system_extension"]).default("user"),
+  householdId: varchar("householdId", { length: 36 }),
+  verticalId: varchar("verticalId", { length: 21 }),
+  action: varchar("action", { length: 128 }).notNull(),
+  category: varchar("category", { length: 64 }).notNull(),
+  resourceType: varchar("resourceType", { length: 64 }),
+  resourceId: varchar("resourceId", { length: 128 }),
+  outcome: mysqlEnum("outcome", ["success", "failure", "denied"]).notNull().default("success"),
+  metadata: json("metadata"),
+  previousValue: text("previousValue"),
+  newValue: text("newValue"),
+  ipAddress: varchar("ipAddress", { length: 64 }),
+  userAgent: text("userAgent"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+}, (t) => ({
+  actorIdx: index("audit_log_actor_idx").on(t.actorUserId),
+  householdIdx: index("audit_log_household_idx").on(t.householdId),
+  actionIdx: index("audit_log_action_idx").on(t.action),
+  createdAtIdx: index("audit_log_created_at_idx").on(t.createdAt),
+  verticalIdx: index("audit_log_vertical_idx").on(t.verticalId, t.createdAt),
+  resourceIdx: index("audit_log_resource_idx").on(t.resourceType, t.resourceId),
+}));
+export type AuditLog = typeof auditLog.$inferSelect;
+export type InsertAuditLog = typeof auditLog.$inferInsert;
+
+export const projectTasks = mysqlTable("project_tasks", {
+  id: int("id").autoincrement().primaryKey(),
+  phase: varchar("phase", { length: 32 }).notNull().default("1"),
+  area: varchar("area", { length: 64 }).notNull(),
+  bucket: varchar("bucket", { length: 128 }),
+  title: varchar("title", { length: 512 }).notNull(),
+  titleHash: varchar("titleHash", { length: 64 }).notNull(),
+  status: mysqlEnum("status", ["todo", "in_progress", "done", "deferred", "blocked"]).notNull().default("todo"),
+  priority: mysqlEnum("priority", ["critical", "high", "medium", "low"]).notNull().default("medium"),
+  notes: text("notes"),
+  deferredReason: varchar("deferredReason", { length: 512 }),
+  sourceDoc: varchar("sourceDoc", { length: 256 }),
+  completedAt: timestamp("completedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  titleHashIdx: uniqueIndex("project_tasks_title_hash_idx").on(t.titleHash),
+  statusIdx: index("project_tasks_status_idx").on(t.status),
+  areaIdx: index("project_tasks_area_idx").on(t.area),
+  phaseIdx: index("project_tasks_phase_idx").on(t.phase),
+}));
+export type ProjectTask = typeof projectTasks.$inferSelect;
+export type InsertProjectTask = typeof projectTasks.$inferInsert;
+
+// ═══════════════════════════════════════════════════════════════════════
+// FINANCIAL MODULE — Chart of Accounts, Expenses, Vendor Orders
+// ═══════════════════════════════════════════════════════════════════════
+
+export const expenseCategorizationRules = mysqlTable("expense_categorization_rules", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  verticalId: varchar("verticalId", { length: 36 }),
+  propertyId: varchar("propertyId", { length: 36 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  pattern: varchar("pattern", { length: 255 }).notNull(),
+  patternType: mysqlEnum("patternType", ["exact", "contains", "starts_with", "regex"]).notNull(),
+  glAccountCode: varchar("glAccountCode", { length: 50 }),
+  isActive: boolean("isActive").default(true),
+  priority: int("priority").default(0),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ExpenseCategorizationRule = typeof expenseCategorizationRules.$inferSelect;
+export type InsertExpenseCategorizationRule = typeof expenseCategorizationRules.$inferInsert;
+
+export const vendorOrders = mysqlTable("vendor_orders", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  memberId: varchar("memberId", { length: 36 }),
+  vendor: varchar("vendor", { length: 255 }).notNull(),
+  orderNumber: varchar("orderNumber", { length: 255 }),
+  totalAmount: decimal("totalAmount", { precision: 12, scale: 2 }),
+  currency: varchar("currency", { length: 3 }).default("USD"),
+  taxAmount: decimal("taxAmount", { precision: 12, scale: 2 }),
+  description: text("description"),
+  sourceType: mysqlEnum("sourceType", ["email_scrape", "manual", "receipt_upload"]).notNull(),
+  emailSubject: varchar("emailSubject", { length: 500 }),
+  emailReceivedAt: timestamp("emailReceivedAt"),
+  rawEmailBody: text("rawEmailBody"),
+  lineItems: json("lineItems"),
+  shippingAddress: text("shippingAddress"),
+  trackingNumber: varchar("trackingNumber", { length: 255 }),
+  status: mysqlEnum("status", ["pending_review", "approved", "rejected", "auto_categorized"]).default("pending_review").notNull(),
+  glAccountCode: varchar("glAccountCode", { length: 50 }),
+  verticalId: varchar("verticalId", { length: 36 }),
+  propertyId: varchar("propertyId", { length: 36 }),
+  categoryAppliedBy: mysqlEnum("categoryAppliedBy", ["manual", "rule", "ai"]),
+  receiptUrl: varchar("receiptUrl", { length: 500 }),
+  expenseId: varchar("expenseId", { length: 21 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type VendorOrder = typeof vendorOrders.$inferSelect;
+export type InsertVendorOrder = typeof vendorOrders.$inferInsert;
+
+export const expenses = mysqlTable("expenses", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  memberId: varchar("memberId", { length: 36 }),
+  vendorOrderId: varchar("vendorOrderId", { length: 21 }),
+  bankAccountId: int("bankAccountId"),
+  paymentAccountId: varchar("paymentAccountId", { length: 36 }),
+  glAccountCode: varchar("glAccountCode", { length: 50 }),
+  verticalId: varchar("verticalId", { length: 36 }),
+  propertyId: varchar("propertyId", { length: 36 }),
+  description: varchar("description", { length: 500 }).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+  exchangeRate: decimal("exchangeRate", { precision: 10, scale: 4 }),
+  taxAmount: decimal("taxAmount", { precision: 12, scale: 2 }),
+  taxCategory: varchar("taxCategory", { length: 100 }),
+  vendor: varchar("vendor", { length: 255 }),
+  expenseDate: timestamp("expenseDate").notNull(),
+  receiptUrl: varchar("receiptUrl", { length: 500 }),
+  notes: text("notes"),
+  isTaxDeductible: boolean("isTaxDeductible").default(false),
+  isReimbursable: boolean("isReimbursable").default(false),
+  reimbursedAmount: decimal("reimbursedAmount", { precision: 12, scale: 2 }),
+  reimbursementDate: timestamp("reimbursementDate"),
+  qboExportStatus: mysqlEnum("qboExportStatus", ["pending", "exported", "failed", "not_applicable"]).default("not_applicable"),
+  qboExportDate: timestamp("qboExportDate"),
+  qboTransactionId: varchar("qboTransactionId", { length: 255 }),
+  status: mysqlEnum("status", ["pending", "approved", "rejected"]).default("pending").notNull(),
+  approvedBy: varchar("approvedBy", { length: 36 }),
+  approvedAt: timestamp("approvedAt"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Expense = typeof expenses.$inferSelect;
+export type InsertExpense = typeof expenses.$inferInsert;
+
+export const propertyExpenseRecords = mysqlTable("property_expense_records", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  propertyId: varchar("propertyId", { length: 36 }).notNull(),
+  memberId: varchar("memberId", { length: 36 }),
+  description: varchar("description", { length: 500 }).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("JMD").notNull(),
+  exchangeRate: decimal("exchangeRate", { precision: 10, scale: 4 }),
+  usdEquivalent: decimal("usdEquivalent", { precision: 12, scale: 2 }),
+  expenseDate: timestamp("expenseDate").notNull(),
+  vendor: varchar("vendor", { length: 255 }),
+  receiptUrl: varchar("receiptUrl", { length: 500 }),
+  notes: text("notes"),
+  isTaxDeductible: boolean("isTaxDeductible").default(false),
+  glAccountCode: varchar("glAccountCode", { length: 50 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type PropertyExpenseRecord = typeof propertyExpenseRecords.$inferSelect;
+export type InsertPropertyExpenseRecord = typeof propertyExpenseRecords.$inferInsert;
+
+export const chartOfAccounts = mysqlTable("chart_of_accounts", {
+  id: varchar("id", { length: 32 }).primaryKey(),
+  verticalId: varchar("verticalId", { length: 36 }).notNull(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  accountType: mysqlEnum("accountType", [
+    "asset", "liability", "equity", "income", "expense",
+    "cost_of_goods_sold", "other_income", "other_expense",
+    "accounts_receivable", "accounts_payable", "bank",
+  ]).notNull(),
+  accountName: varchar("accountName", { length: 255 }).notNull(),
+  accountNumber: varchar("accountNumber", { length: 20 }).notNull(),
+  displayOrder: int("displayOrder").default(0),
+  isTaxRelevant: boolean("isTaxRelevant").default(false),
+  taxFormLine: varchar("taxFormLine", { length: 100 }),
+  taxJurisdiction: varchar("taxJurisdiction", { length: 50 }).default("us_federal"),
+  qboAccountId: varchar("qboAccountId", { length: 50 }),
+  qboSyncStatus: mysqlEnum("qboSyncStatus", ["synced", "pending", "error", "not_linked"]).default("not_linked"),
+  parentAccountId: varchar("parentAccountId", { length: 32 }),
+  isActive: boolean("isActive").default(true),
+  isSystemAccount: boolean("isSystemAccount").default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ChartOfAccount = typeof chartOfAccounts.$inferSelect;
+export type InsertChartOfAccount = typeof chartOfAccounts.$inferInsert;
+
+export const coaMappings = mysqlTable("coa_mappings", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  chartOfAccountId: varchar("chartOfAccountId", { length: 32 }).notNull(),
+  qboAccountId: varchar("qboAccountId", { length: 50 }).notNull(),
+  qboAccountName: varchar("qboAccountName", { length: 255 }),
+  mappingType: mysqlEnum("mappingType", ["one_to_one", "many_to_one", "custom"]).default("one_to_one"),
+  isActive: boolean("isActive").default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type CoaMapping = typeof coaMappings.$inferSelect;
+export type InsertCoaMapping = typeof coaMappings.$inferInsert;
+
+export const airbnbPayoutRecords = mysqlTable("airbnb_payout_records", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  propertyId: varchar("propertyId", { length: 36 }).notNull(),
+  platformBookingId: varchar("platformBookingId", { length: 255 }),
+  payoutDate: timestamp("payoutDate").notNull(),
+  grossAmount: decimal("grossAmount", { precision: 12, scale: 2 }),
+  hostFee: decimal("hostFee", { precision: 12, scale: 2 }),
+  cleaningFee: decimal("cleaningFee", { precision: 12, scale: 2 }),
+  occupancyTaxes: decimal("occupancyTaxes", { precision: 12, scale: 2 }),
+  vat: decimal("vat", { precision: 12, scale: 2 }),
+  netPayout: decimal("netPayout", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+  exchangeRate: decimal("exchangeRate", { precision: 10, scale: 4 }),
+  payoutMethod: varchar("payoutMethod", { length: 100 }),
+  transactionReference: varchar("transactionReference", { length: 255 }),
+  status: mysqlEnum("status", ["pending", "confirmed", "failed"]).default("pending").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type AirbnbPayoutRecord = typeof airbnbPayoutRecords.$inferSelect;
+export type InsertAirbnbPayoutRecord = typeof airbnbPayoutRecords.$inferInsert;
+
+export const ltrPayments = mysqlTable("ltr_payments", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  propertyId: varchar("propertyId", { length: 36 }).notNull(),
+  tenantName: varchar("tenantName", { length: 255 }),
+  paymentDate: timestamp("paymentDate").notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+  paymentType: mysqlEnum("paymentType", ["rent", "deposit", "late_fee", "utility", "other"]).default("rent").notNull(),
+  paymentMethod: varchar("paymentMethod", { length: 100 }),
+  notes: text("notes"),
+  receiptUrl: varchar("receiptUrl", { length: 500 }),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type LtrPayment = typeof ltrPayments.$inferSelect;
+export type InsertLtrPayment = typeof ltrPayments.$inferInsert;
+
+export const financialAccounts = mysqlTable("financial_accounts", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  name: varchar("name", { length: 255 }).notNull(),
+  accountType: mysqlEnum("accountType", ["checking", "savings", "credit_card", "investment", "loan", "other"]).notNull(),
+  institution: varchar("institution", { length: 255 }),
+  currentBalance: decimal("currentBalance", { precision: 12, scale: 2 }),
+  currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+  verticalId: varchar("verticalId", { length: 36 }),
+  isActive: boolean("isActive").default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type FinancialAccount = typeof financialAccounts.$inferSelect;
+export type InsertFinancialAccount = typeof financialAccounts.$inferInsert;
+
+export const financialTransactions = mysqlTable("financial_transactions", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  financialAccountId: varchar("financialAccountId", { length: 21 }).notNull(),
+  description: varchar("description", { length: 500 }).notNull(),
+  amount: decimal("amount", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+  transactionType: mysqlEnum("transactionType", ["debit", "credit"]).notNull(),
+  transactionDate: timestamp("transactionDate").notNull(),
+  vendor: varchar("vendor", { length: 255 }),
+  glAccountCode: varchar("glAccountCode", { length: 50 }),
+  verticalId: varchar("verticalId", { length: 36 }),
+  propertyId: varchar("propertyId", { length: 36 }),
+  receiptUrl: varchar("receiptUrl", { length: 500 }),
+  notes: text("notes"),
+  isTaxDeductible: boolean("isTaxDeductible").default(false),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type FinancialTransaction = typeof financialTransactions.$inferSelect;
+export type InsertFinancialTransaction = typeof financialTransactions.$inferInsert;
+
+// ═══════════════════════════════════════════════════════════════════════
+// GOVERNANCE & FINANCIAL — Budget, Approvals, Financial Reports
+// ═══════════════════════════════════════════════════════════════════════
+
+export const budgets = mysqlTable("budgets", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  verticalId: varchar("verticalId", { length: 36 }),
+  propertyId: varchar("propertyId", { length: 36 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  fiscalYear: int("fiscalYear").notNull(),
+  fiscalMonth: int("fiscalMonth"),
+  totalBudget: decimal("totalBudget", { precision: 12, scale: 2 }).notNull(),
+  currency: varchar("currency", { length: 3 }).default("USD").notNull(),
+  status: mysqlEnum("status", ["draft", "active", "closed"]).default("draft").notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type Budget = typeof budgets.$inferSelect;
+export type InsertBudget = typeof budgets.$inferInsert;
+
+export const budgetLineItems = mysqlTable("budget_line_items", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  budgetId: varchar("budgetId", { length: 21 }).notNull(),
+  glAccountCode: varchar("glAccountCode", { length: 50 }).notNull(),
+  budgetedAmount: decimal("budgetedAmount", { precision: 12, scale: 2 }).notNull(),
+  actualAmount: decimal("actualAmount", { precision: 12, scale: 2 }).default("0"),
+  variance: decimal("variance", { precision: 12, scale: 2 }).default("0"),
+  notes: text("notes"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type BudgetLineItem = typeof budgetLineItems.$inferSelect;
+export type InsertBudgetLineItem = typeof budgetLineItems.$inferInsert;
+
+export const approvalWorkflows = mysqlTable("approval_workflows", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  verticalId: varchar("verticalId", { length: 36 }),
+  name: varchar("name", { length: 255 }).notNull(),
+  triggerAmount: decimal("triggerAmount", { precision: 12, scale: 2 }),
+  approverRole: mysqlEnum("approverRole", ["household_admin", "ea", "owner", "custom"]).notNull(),
+  approverMemberId: varchar("approverMemberId", { length: 36 }),
+  isActive: boolean("isActive").default(true),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
+export type ApprovalWorkflow = typeof approvalWorkflows.$inferSelect;
+export type InsertApprovalWorkflow = typeof approvalWorkflows.$inferInsert;
+
+export const financialReports = mysqlTable("financial_reports", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  verticalId: varchar("verticalId", { length: 36 }),
+  reportType: mysqlEnum("reportType", ["pl", "balance_sheet", "cash_flow", "budget_vs_actual", "custom"]).notNull(),
+  fiscalYear: int("fiscalYear").notNull(),
+  fiscalMonth: int("fiscalMonth"),
+  reportData: json("reportData"),
+  generatedBy: varchar("generatedBy", { length: 36 }),
+  generatedAt: timestamp("generatedAt").defaultNow().notNull(),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type FinancialReport = typeof financialReports.$inferSelect;
+export type InsertFinancialReport = typeof financialReports.$inferInsert;
+
+// ═══════════════════════════════════════════════════════════════════════
+// GUARDIAN SYSTEM — Active monitoring, circuit breakers, health checks
+// ═══════════════════════════════════════════════════════════════════════
+
+export const guardianAlerts = mysqlTable("guardian_alerts", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  memberId: varchar("memberId", { length: 36 }),
+  alertType: mysqlEnum("alertType", [
+    "calendar_sync_failure", "booking_conflict", "device_offline",
+    "security_event", "financial_anomaly", "health_check_failure",
+    "propagation_failure", "token_expiry",
+  ]).notNull(),
+  severity: mysqlEnum("severity", ["info", "warning", "critical"]).default("warning").notNull(),
+  title: varchar("title", { length: 255 }).notNull(),
+  description: text("description"),
+  resourceType: varchar("resourceType", { length: 64 }),
+  resourceId: varchar("resourceId", { length: 128 }),
+  acknowledgedBy: varchar("acknowledgedBy", { length: 36 }),
+  acknowledgedAt: timestamp("acknowledgedAt"),
+  resolvedAt: timestamp("resolvedAt"),
+  autoResolved: boolean("autoResolved").default(false),
+  metadata: json("metadata"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+});
+export type GuardianAlert = typeof guardianAlerts.$inferSelect;
+export type InsertGuardianAlert = typeof guardianAlerts.$inferInsert;
+
+export const guardianConfig = mysqlTable("guardian_config", {
+  id: varchar("id", { length: 21 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  isEnabled: boolean("isEnabled").default(true).notNull(),
+  monitoringIntervalMinutes: int("monitoringIntervalMinutes").default(5),
+  alertChannels: json("alertChannels").$type<string[]>().default(["in_app"]),
+  emailNotifications: boolean("emailNotifications").default(false),
+  smsNotifications: boolean("smsNotifications").default(false),
+  pushNotifications: boolean("pushNotifications").default(true),
+  customRules: json("customRules"),
+  createdAt: timestamp("createdAt").defaultNow().notNull(),
+  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+});
 export type GuardianConfig = typeof guardianConfig.$inferSelect;
 export type InsertGuardianConfig = typeof guardianConfig.$inferInsert;
 
