@@ -18,6 +18,7 @@ interface GoogleCalendarEvent {
   end: { dateTime?: string; date?: string; timeZone?: string };
   status: string;
   recurrence?: string[];
+  recurringEventId?: string;
   attendees?: { email: string; responseStatus: string }[];
   organizer?: { email: string; displayName?: string };
   updated: string;
@@ -258,6 +259,7 @@ export function convertGoogleEvent(gEvent: GoogleCalendarEvent, calendarId: stri
   isAllDay: boolean;
   status: string;
   recurrenceRule: string | null;
+  recurringEventId: string | null;
 } {
   const isAllDay = !gEvent.start.dateTime;
   let startTime: number;
@@ -297,6 +299,7 @@ export function convertGoogleEvent(gEvent: GoogleCalendarEvent, calendarId: stri
     isAllDay,
     status: gEvent.status === "cancelled" ? "cancelled" : "confirmed",
     recurrenceRule: gEvent.recurrence?.join("\n") || null,
+    recurringEventId: gEvent.recurringEventId || null,
   };
 }
 
