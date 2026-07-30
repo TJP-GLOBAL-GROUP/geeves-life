@@ -9,8 +9,8 @@
 import type { Request, Response } from "express";
 import { getDb } from "../db";
 import { ENV } from "../_core/env";
-import { propagationQueue } from "../../drizzle/schema";
-import { eq, and, lte } from "drizzle-orm";
+import { propagationQueue, shadowBlocks } from "../../drizzle/schema";
+import { eq, and, lte, count } from "drizzle-orm";
 import { onEventUpserted } from "../services/eventPropagation";
 
 const BATCH_SIZE = 200; // increased from 50 to speed up backfill drain
@@ -62,6 +62,22 @@ export async function propagationRetryHandler(req: Request, res: Response) {
           skipGoogleWrite: false,
           skipRateLimit: true,
         });
+
+        // RC-3: don't trust a non-throwing return — onEventUpserted records
+        // Google-write failures as sync_failed block rows rather than throwing.
+        // Verify the outcome; if blocks are still failed, treat as a failed attempt.
+        const [failedRow] = await db
+          .select({ n: count() })
+          .from(shadowBlocks)
+          .where(
+            and(
+              eq(shadowBlocks.sourceEventId, item.eventId),
+              eq(shadowBlocks.syncStatus, "sync_failed"),
+            )
+          );
+        if ((failedRow?.n ?? 0) > 0) {
+          throw new Error(`${failedRow!.n} shadow block(s) still sync_failed after retry`);
+        }
 
         // Mark resolved
         await db

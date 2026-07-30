@@ -520,6 +520,12 @@ export async function onEventUpserted(
     );
   } catch (err) {
     console.error(`[Propagation] Error propagating event ${eventId}:`, err);
+    // RC-3: the "no verticalId" abort must reach callers (webhook retry queue /
+    // propagation retry handler) so the failure is retried instead of silently
+    // logged. All other errors stay best-effort by design.
+    if ((err as Error)?.message?.includes("has no verticalId")) {
+      throw err;
+    }
   } finally {
     propagationLock.delete(eventId);
   }
