@@ -45,10 +45,13 @@ export const GOOGLE_SCOPES = {
     "email",
     "profile",
   ],
-  /** Calendar read+write — requested via Settings > Integrations > Add Account */
+  /** Calendar events read+write + calendar list read-only — requested via Settings > Integrations > Add Account.
+   *  IMPORTANT: Do NOT use the full 'calendar' scope — it grants share/permanently-delete access
+   *  to all calendars, which Geeves never needs and will fail Google verification review.
+   */
   CALENDAR: [
-    "https://www.googleapis.com/auth/calendar",
     "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
   ],
   /** Gmail send-only — requested when user enables email notifications/invites */
   GMAIL_SEND: [

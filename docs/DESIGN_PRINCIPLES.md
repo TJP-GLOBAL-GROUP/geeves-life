@@ -300,3 +300,34 @@ The human tester's time is expensive. Every bug that could have been caught by r
 *This document was established during Phase 1 and must be referenced before any UI copy, data model change, or feature design in subsequent phases.*
 
 *Last updated: Jul 7, 2026 by Manus AI — Added §12 Test Script Development Standard*
+
+---
+
+## 13. Google OAuth Scope Policy
+
+All Google OAuth scopes requested by Geeves.Life must follow the **principle of least privilege**. This section is mandatory reading for any contributor adding or modifying Google API integrations.
+
+### Rules
+
+1. **Never request the full `calendar` scope** (`https://www.googleapis.com/auth/calendar`). It grants share/permanently-delete access to all calendars — capabilities Geeves never uses. Use `calendar.events` + `calendar.calendarlist.readonly` instead.
+2. **Request scopes incrementally.** Identity-only scopes at login; sensitive scopes only when the user explicitly connects an integration (Settings → Integrations → Add Account).
+3. **Justify every sensitive scope.** Before adding a new scope, document in `docs/GOOGLE_OAUTH_SCOPES.md` exactly which API endpoints require it and why no narrower scope suffices.
+4. **Never bundle scopes.** Each integration (Calendar, Gmail, Sheets, Drive) has its own scope set. Only request the set relevant to the operation being performed.
+5. **Prefer read-only variants** unless write access is demonstrably required (e.g., `calendar.calendarlist.readonly` over `calendar.calendarlist`).
+
+### Current Approved Scopes
+
+| Integration | Scopes | Justification |
+|-------------|--------|---------------|
+| Sign-in | `openid`, `email`, `profile` | Identity only — no sensitive access |
+| Calendar | `calendar.events`, `calendar.calendarlist.readonly` | Event CRUD + push notifications; calendar list for onboarding |
+| Gmail Send | `gmail.send` | Outbound notifications/invites only |
+| Gmail Read | `gmail.readonly` | Booking confirmation email parsing |
+| Sheets | `spreadsheets` | Tax workbook + expense classification |
+| Drive | `drive` | File management and uploads |
+
+### Reference
+
+Full analysis and justification: [`docs/GOOGLE_OAUTH_SCOPES.md`](./GOOGLE_OAUTH_SCOPES.md)
+
+*Added: Aug 2, 2026 — OAuth scope reduction (removed overly broad `calendar` scope)*

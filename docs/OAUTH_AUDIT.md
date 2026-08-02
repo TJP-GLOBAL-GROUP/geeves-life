@@ -260,3 +260,35 @@ All six findings were resolved in a single sprint on Jun 25, 2026. See `AI_MEMOR
 | 6 | Zero-key fallback on missing JWT_SECRET | ✅ **Resolved** | `tokenEncryption.ts` now throws a fatal error if `JWT_SECRET` is absent. Server will not start. |
 
 **Test results after sprint:** 10/10 test files passed, 182/182 tests passed, 0 TypeScript errors.
+
+---
+
+## Update: Aug 2, 2026 — Scope Reduction Applied
+
+**Status:** FINDING 1 (Critical) was fully addressed in earlier commits by separating login scopes from integration scopes. This update completes the hardening by removing the overly broad `calendar` scope from the CALENDAR scope set itself.
+
+### Change Applied
+
+```diff
+  CALENDAR: [
+-   "https://www.googleapis.com/auth/calendar",
+-   "https://www.googleapis.com/auth/calendar.events",
++   "https://www.googleapis.com/auth/calendar.events",
++   "https://www.googleapis.com/auth/calendar.calendarlist.readonly",
+  ],
+```
+
+### Rationale
+
+The full `https://www.googleapis.com/auth/calendar` scope grants share/permanently-delete access to all calendars. Geeves only needs event CRUD + push notifications (`calendar.events`) and calendar list discovery (`calendar.calendarlist.readonly`). The overly broad scope was the root cause of the Google Console flagging "See, edit, share, and permanently delete all the calendars you can access."
+
+### Google Console Action Required
+
+After deployment, update the Google Auth Platform → Data Access page:
+1. Remove `https://www.googleapis.com/auth/calendar`
+2. Remove `https://www.googleapis.com/auth/calendar.calendars` (if listed)
+3. Add `https://www.googleapis.com/auth/calendar.calendarlist.readonly`
+4. Keep `https://www.googleapis.com/auth/calendar.events`
+5. Re-submit for verification
+
+See full analysis: [`docs/GOOGLE_OAUTH_SCOPES.md`](./GOOGLE_OAUTH_SCOPES.md)
