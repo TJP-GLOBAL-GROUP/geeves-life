@@ -5,8 +5,17 @@ This document lists all environment variables required to run the Geeves.Life ap
 ## Database
 
 | Variable | Description | Example |
-|----------|-------------|---------|
-| `DATABASE_URL` | MySQL/TiDB connection string with SSL | `mysql://user:pass@host:4000/geeves?ssl={"rejectUnauthorized":true}` |
+|----------|-------------|----------|
+| `DATABASE_URL` | MySQL (Cloud SQL) connection string | `mysql://geeves_beta_user:pass@35.245.41.148:3306/geeves_beta` |
+
+**Environment-specific databases (GCP Secret Manager):**
+
+| Environment | GCP Secret Name | Cloud SQL Database | Connection |
+|-------------|-----------------|--------------------|-----------|
+| Beta | `geeves-beta-database-url` | `geeves_beta` | `mysql://geeves_beta_user:PASS@35.245.41.148:3306/geeves_beta` |
+| Live | `geeves-live-database-url` | `geeves_live` | `mysql://geeves_beta_user:PASS@35.245.41.148:3306/geeves_live` |
+
+> **Migration note (Aug 3, 2026):** Migrated from TiDB Serverless (`gateway03.us-east-1.prod.aws.tidbcloud.com:4000`) to self-managed Cloud SQL instance (`geeves-beta` at `35.245.41.148`). No TiDB-specific features were in use; the schema is standard MySQL 8.0 compatible.
 
 ## Server
 
