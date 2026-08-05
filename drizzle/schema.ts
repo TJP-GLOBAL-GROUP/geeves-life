@@ -1,4 +1,4 @@
-import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, decimal, boolean, json, bigint, uniqueIndex, index } from "drizzle-orm/mysql-core";
+import { int, mysqlEnum, mysqlTable, text, timestamp, varchar, decimal, boolean, json, bigint, uniqueIndex, index, date } from "drizzle-orm/mysql-core";
 
 // ═══════════════════════════════════════════════════════════════════════
 // EXISTING SHOPPING MODULE TABLES
