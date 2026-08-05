@@ -64,16 +64,32 @@ let _pool: ReturnType<typeof mysql.createPool> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      // Safely append connectionLimit and SSL.
-      // Cloud SQL requires SSL for external connections; TiDB URLs already include ssl param.
-      let dbUrl = process.env.DATABASE_URL;
-      const needsSsl = !dbUrl.includes("ssl=") && !dbUrl.includes("ssl%3D");
-      const separator = dbUrl.includes("?") ? "&" : "?";
-      const extras = [
-        "connectionLimit=20",
-        ...(needsSsl ? ['ssl={"rejectUnauthorized":false}'] : []),
-      ].join("&");
-      _pool = mysql.createPool(dbUrl + separator + extras);
+      const dbUrl = process.env.DATABASE_URL;
+      const instanceConnection = process.env.CLOUD_SQL_CONNECTION_NAME;
+
+      if (instanceConnection) {
+        // Cloud Run: connect via Cloud SQL Auth Proxy Unix socket.
+        // DATABASE_URL format: mysql://user:pass@localhost/dbname
+        // The Auth Proxy handles SSL automatically — no ssl param needed.
+        const url = new URL(dbUrl);
+        const socketPath = `/cloudsql/${instanceConnection}`;
+        _pool = mysql.createPool({
+          user: url.username,
+          password: decodeURIComponent(url.password),
+          database: url.pathname.replace("/", ""),
+          socketPath,
+          connectionLimit: 20,
+        });
+      } else {
+        // External connection (dev, migration scripts): use TCP with auto-SSL.
+        const needsSsl = !dbUrl.includes("ssl=") && !dbUrl.includes("ssl%3D");
+        const separator = dbUrl.includes("?") ? "&" : "?";
+        const extras = [
+          "connectionLimit=20",
+          ...(needsSsl ? ['ssl={"rejectUnauthorized":false}'] : []),
+        ].join("&");
+        _pool = mysql.createPool(dbUrl + separator + extras);
+      }
       _db = drizzle(_pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
