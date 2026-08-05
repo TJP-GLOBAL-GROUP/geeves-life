@@ -64,10 +64,16 @@ let _pool: ReturnType<typeof mysql.createPool> | null = null;
 export async function getDb() {
   if (!_db && process.env.DATABASE_URL) {
     try {
-      // Safely append connectionLimit — DATABASE_URL may already contain query params (e.g. ssl=...)
-      const dbUrl = process.env.DATABASE_URL;
+      // Safely append connectionLimit and SSL.
+      // Cloud SQL requires SSL for external connections; TiDB URLs already include ssl param.
+      let dbUrl = process.env.DATABASE_URL;
+      const needsSsl = !dbUrl.includes("ssl=") && !dbUrl.includes("ssl%3D");
       const separator = dbUrl.includes("?") ? "&" : "?";
-      _pool = mysql.createPool(dbUrl + separator + "connectionLimit=20");
+      const extras = [
+        "connectionLimit=20",
+        ...(needsSsl ? ['ssl={"rejectUnauthorized":false}'] : []),
+      ].join("&");
+      _pool = mysql.createPool(dbUrl + separator + extras);
       _db = drizzle(_pool);
     } catch (error) {
       console.warn("[Database] Failed to connect:", error);
