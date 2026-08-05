@@ -55,7 +55,6 @@ create_or_update_job() {
   local TIMEZONE="${5:-UTC}"
 
   local URL="${SERVICE_URL}${ENDPOINT}"
-  local HEADERS="Content-Type:application/json,x-cron-secret:${CRON_SECRET}"
 
   echo ""
   echo "→ ${JOB_NAME} (${SCHEDULE})"
@@ -71,7 +70,8 @@ create_or_update_job() {
       --schedule="${SCHEDULE}" \
       --uri="${URL}" \
       --http-method=POST \
-      --headers="${HEADERS}" \
+      --headers="Content-Type=application/json" \
+      --headers="x-cron-secret=${CRON_SECRET}" \
       --message-body='{}' \
       --time-zone="${TIMEZONE}" \
       --description="${DESCRIPTION}" \
@@ -87,7 +87,8 @@ create_or_update_job() {
       --schedule="${SCHEDULE}" \
       --uri="${URL}" \
       --http-method=POST \
-      --headers="${HEADERS}" \
+      --headers="Content-Type=application/json" \
+      --headers="x-cron-secret=${CRON_SECRET}" \
       --message-body='{}' \
       --time-zone="${TIMEZONE}" \
       --description="${DESCRIPTION}" \
