@@ -73,7 +73,7 @@ export async function enqueuePropagationRetry(
       createdAt: now,
       status: "pending",
     });
-    console.log(`[Propagation] \u2709\ufe0f Enqueued retry for event ${eventId} (reason: ${reason})`);
+    console.log(`[Propagation] ️ Enqueued retry for event ${eventId} (reason: ${reason})`);
   } catch (err) {
     console.warn(`[Propagation] Failed to enqueue retry for ${eventId}:`, (err as Error)?.message);
   }
@@ -756,6 +756,7 @@ async function buildPropagationTargets(
         for (const tgt of targetCals) {
           if (seen.has(tgt.id)) continue;
           if (!(tgt as any).shadowBlocking) continue; // MySQL returns 0/1; falsy check covers both false and 0
+          if (!(tgt as any).accountEmail) continue; // P-16: no accountEmail = can never sync (guard was missing on this path)
           if (shouldExcludeForMember(tgt.memberId, tgt.verticalId!)) {
             console.log(`[Propagation] Skipping multi-day event for member ${tgt.memberId} (excludeMultiDayEvents=true)`);
             seen.add(tgt.id);
