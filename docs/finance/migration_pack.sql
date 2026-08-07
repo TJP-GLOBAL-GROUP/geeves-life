@@ -18,6 +18,10 @@
 --     * Geeves.Life qbo_entity -> 'pending' (realm does not exist yet, D6).
 --     * Verification block added (POST §1d–§1g).
 --     §§0,2–13 untouched.
+--   2026-08-07  §1 BL display name resolved (owner decision, brand review
+--     v2.1 gap closure): doc-side 'Blue Lagoon' placeholder RETIRED;
+--     BL display name = 'Bohemian Lodges' (code remains 'BL').
+--     §§0,2–13 untouched.
 --
 -- IDEMPOTENCY CONTRACT
 --   * All DML is idempotent in pure SQL (INSERT OR IGNORE / value-guards /
@@ -101,6 +105,8 @@ SELECT COUNT(*) AS post_s0_tables FROM sqlite_master
 --     sync_allowlisted = 0 — structural, not a preference).
 --   * Geeves.Life row qbo_entity -> 'pending' (D6: realm does not exist yet).
 --   Verification: POST §1d–§1g below.
+-- AMENDED 2026-08-07 (owner decision / brand review v2.1): BL display name
+--   resolved to 'Bohemian Lodges' — doc_display_name 'Blue Lagoon' retired.
 -- ============================================================================
 BEGIN IMMEDIATE;
 
@@ -124,7 +130,7 @@ INSERT OR IGNORE INTO vertical_code_map
   (staging_code, doc_code, display_name, doc_display_name, account_prefix, is_system_bucket, qbo_entity, sync_allowlisted, status, merged_into, notes) VALUES
   ('MB',   'BKY',  'Maxfield Bakery',     'Maxfield Bakery',        'MB',    0, 'Maxfield Bakery QBO',           1, 'active',  NULL,   'Jamaican Ltd (83% owned) — corporate return + GCT; Form 5471/CFC/GILTI for US owner (Plan §5). D6 allowlisted realm 123145971566304'),
   ('MM',   'MKT',  'Maxfield Market',     'Maxfield Market Global', 'MM',    0, 'Maxfield Market Global LLC QBO',1, 'active',  NULL,   'ecommerce. D6 allowlisted realm 9130350512376806 (MMG)'),
-  ('BL',   'BL',   'Bohemian Lodges',     'Blue Lagoon',            'BL',    0, 'Bohemian Lodges QBO',           0, 'active',  NULL,   'name collision: staging "Bohemian Lodges" vs doc "Blue Lagoon" — owner confirms display name; geeves_only per D6'),
+  ('BL',   'BL',   'Bohemian Lodges',     'Bohemian Lodges',        'BL',    0, 'Bohemian Lodges QBO',           0, 'active',  NULL,   'owner confirmed 2026-08-07 (brand review v2.1): display name = Bohemian Lodges, code remains BL; doc-side "Blue Lagoon" placeholder retired; geeves_only per D6'),
   ('GL',   'GDL',  'Geeves.Life',         'Good Life',              'GL',    0, 'pending',                       0, 'active',  NULL,   'D3: staging GL keeps code (has data); doc "Good Life" retired to GDL (no data). v2.2 §2.4/CRITICAL-1b: qbo_entity pending — D6 realm does not exist yet'),
   ('SO',   'SO',   'StartOut',            'StartOut',               'SO',    0, 'StartOut QBO',                  0, 'active',  NULL,   'StartOut labeled work; geeves_only per D6'),
   ('BLab', 'BLAB', 'Beta Lab',            'B.Lab',                  'BLab',  0, 'Beta Lab QBO',                  0, 'active',  NULL,   'betalabpro.com — confirm status; GL/BLab spend currently intended to post into TJP accounts (TJP-500 note) — design fork needed before G3; geeves_only per D6'),
@@ -149,6 +155,13 @@ UPDATE vertical_code_map SET sync_allowlisted = 0
 -- CRITICAL-1b: GL realm does not exist yet.
 UPDATE vertical_code_map SET qbo_entity = 'pending'
  WHERE staging_code = 'GL' AND qbo_entity <> 'pending';
+
+-- Brand review v2.1 / owner decision 2026-08-07: BL display name resolved.
+-- Value-guarded DML so DBs seeded with the 'Blue Lagoon' doc-side placeholder
+-- converge even where the INSERT OR IGNORE above is a no-op (re-runnable).
+UPDATE vertical_code_map SET doc_display_name = 'Bohemian Lodges',
+       notes = 'owner confirmed 2026-08-07 (brand review v2.1): display name = Bohemian Lodges, code remains BL; doc-side "Blue Lagoon" placeholder retired; geeves_only per D6'
+ WHERE staging_code = 'BL' AND doc_display_name <> 'Bohemian Lodges';
 
 -- verticals: add registry columns (tagged idempotent DDL — see header).
 ALTER TABLE verticals ADD COLUMN is_system_bucket INTEGER NOT NULL DEFAULT 0;  -- [IDEMPOTENT-DDL]
@@ -178,6 +191,13 @@ INSERT OR IGNORE INTO migration_change_log (batch_id, table_name, row_id, field,
    'D6 enforced by data: sync_allowlisted=1 for MB (realm 123145971566304) and MM (realm 9130350512376806) ONLY; all others geeves_only; PERS/FAM hard-excluded; GL qbo_entity=pending',
    'migration_pack.sql §1 (Plan v2.2 §2.4 / Manus CRITICAL-1b)', 'migration-agent');
 
+-- Brand review v2.1 batch log (BL display-name resolution). Re-runnable.
+INSERT OR IGNORE INTO migration_change_log (batch_id, table_name, row_id, field, old_value, new_value, script, actor) VALUES
+  ('B01-registry-bl-display-name', 'vertical_code_map', 'BL', 'doc_display_name',
+   'Blue Lagoon (doc-side placeholder; owner confirmation pending)',
+   'Bohemian Lodges (owner confirmed 2026-08-07; code remains BL)',
+   'migration_pack.sql §1 (brand review v2.1, owner decision)', 'migration-agent');
+
 COMMIT;
 
 -- POST §1a: registry row count.
@@ -204,6 +224,11 @@ SELECT qbo_entity AS post_s1_gl_qbo_entity FROM vertical_code_map WHERE staging_
 -- EXPECT: 0
 SELECT COUNT(*) AS post_s1_allowlist_scope_guard FROM vertical_code_map
  WHERE sync_allowlisted = 1 AND (is_system_bucket <> 0 OR status <> 'active');
+-- POST §1h: BL display name resolved (brand review v2.1).
+-- EXPECT: 'Bohemian Lodges' ; 0 'Blue Lagoon' rows
+SELECT doc_display_name AS post_s1_bl_name FROM vertical_code_map WHERE staging_code = 'BL';
+SELECT COUNT(*) AS post_s1_blue_lagoon_leftovers FROM vertical_code_map
+ WHERE doc_display_name = 'Blue Lagoon' OR display_name = 'Blue Lagoon';
 
 -- ============================================================================
 -- §2  ACCOUNTS GHOST-ROW REPAIR (Plan §1 baseline / §3.2)
@@ -523,7 +548,7 @@ VALUES
   ('B05-month-null-fill', 'transactions', NULL, '*batch*',
    '2 NULL months (txn ids 20057,20058) + 119 scotia_gold statement-cycle mismatches',
    'D4 RESOLVED 2026-08-07: month = fiscal calendar month (SUBSTR(date,1,7)) for all rows; old values logged per-row',
-   'migration_pack.sql §5', 'migration-agent'),
+   'migration_pack.sql §5 (D4 resolved)', 'migration-agent'),
   ('B05-currency-fill', 'transactions', NULL, '*batch*',
    '2 NULL currencies (txn ids 20057,20058)', 'D5 RESOLVED 2026-08-07: currency = USD',
    'migration_pack.sql §5', 'migration-agent');
