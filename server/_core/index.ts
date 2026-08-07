@@ -23,6 +23,7 @@ import { integrationHealthCheckHandler } from "../scheduledHandlers/integrationH
 import { orphanSweepHandler } from "../scheduledHandlers/orphanSweep";
 import { propagationRetryHandler } from "../scheduledHandlers/propagationRetry";
 import { shadowBlockSyncRetryHandler } from "../scheduledHandlers/shadowBlockSyncRetry";
+import { webhookChannelHealthHandler } from "../scheduledHandlers/webhookChannelHealth";
 import { exchangeRateFetchHandler } from "../scheduledHandlers/exchangeRateFetch";
 import { guardianMonitorHandler } from "../scheduledHandlers/guardianMonitor";
 import { guardianDailyDigestHandler } from "../scheduledHandlers/guardianDailyDigest";
@@ -158,6 +159,9 @@ async function startServer() {
   app.post("/api/scheduled/propagation-retry", propagationRetryHandler);
   // P4: Shadow block sync retry — writes pending_sync/sync_failed blocks to Google Calendar
   app.post("/api/scheduled/shadow-block-sync-retry", shadowBlockSyncRetryHandler);
+  // Self-healing webhook channel sweep — re-registers dead/expired/stale push channels
+  // so inbound sync never silently stops between deploys (Aug 7 2026)
+  app.post("/api/scheduled/webhook-channel-health", webhookChannelHealthHandler);
   app.post("/api/internal/family-calendar-cleanup", familyCalendarCleanupHandler);
   // FX-01: Daily exchange rate fetch — populates exchange_rates table for multi-currency reporting
   app.post("/api/scheduled/exchange-rate-fetch", exchangeRateFetchHandler);
