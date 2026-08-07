@@ -1,5 +1,7 @@
-# UI/UX Brand Review v2.1 — Finance Module (Stage C)
-**Reviewer role:** Design engineer, brand systems · **Date:** 2026-08-07 · **Status:** v2.1 — all 5 owner-attention gaps CLOSED
+# UI/UX Brand Review v2.2 — Finance Module (Stage C)
+**Reviewer role:** Design engineer, brand systems · **Date:** 2026-08-07 · **Status:** v2.2 — BLab name corrected + owner-approved 3-tier vertical colour model
+
+> **v2.2 revision note (owner corrections/decisions applied):** (1) BLab display name corrected to **"Beta Lab"** (betalab.com; code remains `BLab`, prefix `BLAB`) — "Bohemian Labs" was wrong and is retired everywhere. (2) The owner-approved **3-tier colour model** supersedes the BRANDING.md §5 rainbow-only rule: **Tier 1** the 6 brand rainbow colours stay as the DEFAULT vertical palette; **Tier 2** an extended picker of **up to 20 colorblindness-accessible options** (`--vp-01…--vp-20`, `client/src/styles/vertical-palette.css`, table in §C1.5) for users to assign to verticals; **Tier 3** beyond 20 verticals, custom colours and/or **pattern fills** (roadmap — patterns double as redundant encoding for colorblind users). BL/BLab/TJPGG hues are unchanged (they are vp-07/08/09 of the extended palette, byte-identical hexes). Everything else is byte-stable with v2.1.
 
 > **v2.1 revision note (owner approvals applied):** the 5 brand-asset gaps flagged in v2 are resolved — BL/BLab/TJPGG vertical hues assigned (§C1.1/§C1.2 registry), fonts self-hosted via `client/src/styles/fonts.css` + `scripts/fetch-fonts.sh`, `financeRedactedLabel` copy deck finalized (`client/src/lib/financeCopy.ts`, quoted in §C2.7), BL display name confirmed as **"Bohemian Lodges"** (code remains `BL`), and the empty-queue artwork gap closed by orchestrator-delivered assets (§C5 note). Everything else is byte-stable with v2.
 
@@ -23,7 +25,7 @@
 
 ## C1. Design-Token Layer
 
-All tokens derive from `docs/BRANDING.md` §3–§5. No other hues are permitted (NC-05/NC-06 precedent). Low-saturation warm palette, ample whitespace, clear hierarchy; **no blue-purple gradients, no Google-Material styling**.
+All tokens derive from `docs/BRANDING.md` §3–§5, **as extended by the owner-approved 3-tier vertical colour model (v2.2, §C1.5)**. Low-saturation warm palette, ample whitespace, clear hierarchy; **no blue-purple gradients, no Google-Material styling**.
 
 ### C1.1 CSS custom properties (light + dark)
 
@@ -37,12 +39,14 @@ All tokens derive from `docs/BRANDING.md` §3–§5. No other hues are permitted
   --brand-indigo: #4F7EC4;  /* MB (finance primary vertical accent) */
   --brand-amber:  #E8943A;  /* SO */
 
-  /* Vertical hues — v2.1 owner-approved (gap 1). Low-saturation, warm-palette
-     tones derived from the rainbow for the three verticals without a fixed
-     assignment. Chips always pair dot + code text (colorblind rule). */
-  --vertical-bl:    #B98A63;  /* BL Bohemian Lodges — warm clay (hospitality) */
-  --vertical-blab:  #5F948F;  /* BLab Bohemian Labs — muted teal-sage (R&D) */
-  --vertical-tjpgg: #8A7B5E;  /* TJPGG TJ Perkins Global Group — bronze (holding) */
+  /* Vertical hues — v2.1 owner-approved (gap 1); v2.2: mapped into the
+     extended palette as vp-07/vp-08/vp-09 (§C1.5, hexes unchanged).
+     Low-saturation, warm-palette tones derived from the rainbow for the
+     three verticals without a fixed assignment. Chips always pair dot +
+     code text (colorblind rule). */
+  --vertical-bl:    #B98A63;  /* BL Bohemian Lodges — warm clay (hospitality) · vp-07 */
+  --vertical-blab:  #5F948F;  /* BLab Beta Lab — muted teal-sage (R&D) · vp-08 */
+  --vertical-tjpgg: #8A7B5E;  /* TJPGG TJ Perkins Global Group — bronze (holding) · vp-09 */
 
   /* Foundation */
   --fin-bg:            #FAFAF8;  /* Warm White */
@@ -114,7 +118,7 @@ colors: {
 fontFamily: { display:['Outfit','Nunito','sans-serif'], sans:['Inter','system-ui','sans-serif'], mono:['JetBrains Mono','ui-monospace','monospace'] }
 ```
 
-**Vertical registry (v2.1 — display names owner-confirmed):**
+**Vertical registry (v2.2 — display names owner-confirmed):**
 
 | Code | Display name | Hue token | Light | Dark |
 |---|---|---|---|---|
@@ -124,11 +128,16 @@ fontFamily: { display:['Outfit','Nunito','sans-serif'], sans:['Inter','system-ui
 | PERS | Personal | `--brand-violet` | `#8B5CF6` | `#8B5CF6` |
 | SO | StartOut | `--brand-amber` | `#E8943A` | `#E8943A` |
 | GL | Geeves.Life | `--brand-teal` | `#2AAFA9` | `#2AAFA9` |
-| **BL** | **Bohemian Lodges** | `--vertical-bl` | `#B98A63` | `#D4A97F` |
-| **BLab** | **Bohemian Labs** | `--vertical-blab` | `#5F948F` | `#82B3AD` |
-| **TJPGG** | **TJ Perkins Global Group** | `--vertical-tjpgg` | `#8A7B5E` | `#AB9A7A` |
+| **BL** | **Bohemian Lodges** | `--vertical-bl` (vp-07) | `#B98A63` | `#D4A97F` |
+| **BLab** | **Beta Lab** | `--vertical-blab` (vp-08) | `#5F948F` | `#82B3AD` |
+| **TJPGG** | **TJ Perkins Global Group** | `--vertical-tjpgg` (vp-09) | `#8A7B5E` | `#AB9A7A` |
 
-**Owner ruling (v2.1, gap 1):** BL display name = **"Bohemian Lodges"** (code remains `BL`; supersedes the "Blue Lagoon" doc-side placeholder — the staging registry on `finance/v2.2-staging` was corrected in the same pass). BL/BLab/TJPGG take low-saturation warm-palette hues derived from the rainbow (BL warm clay from amber/coral family, BLab muted teal-sage from teal family, TJPGG bronze from gold/amber family) so the 6 rainbow colours remain the only *saturated* accents. Chips are always `color dot + code text` (MB / MM / BL…) — colour is never the sole encoding (colorblind rule).
+**Owner rulings (v2.1/v2.2, gap 1):** BL display name = **"Bohemian Lodges"** (code remains `BL`; supersedes the "Blue Lagoon" doc-side placeholder — the staging registry on `finance/v2.2-staging` was corrected in the same pass). BLab display name = **"Beta Lab"** (betalab.com; v2.2 correction — "Bohemian Labs" retired; code remains `BLab`, prefix `BLAB`). BL/BLab/TJPGG take low-saturation warm-palette hues derived from the rainbow (BL warm clay from amber/coral family, BLab muted teal-sage from teal family, TJPGG bronze from gold/amber family) so the 6 rainbow colours remain the only *saturated* accents. Chips are always `color dot + code text` (MB / MM / BL…) — colour is never the sole encoding (colorblind rule).
+
+**Owner-approved 3-tier colour model (v2.2 — supersedes the BRANDING.md §5 rainbow-only rule):**
+1. **Tier 1 — defaults.** The 6 brand rainbow colours stay as the DEFAULT vertical palette (registry rows above, `--brand-*` tokens).
+2. **Tier 2 — extended picker.** Up to **20 colorblindness-accessible options** (`--vp-01…--vp-20`, §C1.5) that users may assign to verticals. The three v2.1 derived hues are slots vp-07/08/09 of this set, hexes unchanged.
+3. **Tier 3 — beyond 20.** Custom colours and/or **pattern fills** (roadmap). Patterns double as redundant encoding for colorblind users, so Tier 3 is also the long-term accessibility answer once more than 20 verticals must be simultaneously distinguishable.
 
 ### C1.3 Typography rules for finance
 - Page/section titles: **Outfit 700**. Never Outfit 300 for functional headings (300 reserved for salutations/tagline per NC-01/NC-10).
@@ -142,6 +151,37 @@ fontFamily: { display:['Outfit','Nunito','sans-serif'], sans:['Inter','system-ui
 - Register rows: 40px default height, 14px body, generous cell padding; compact toggle never below WCAG 24px targets.
 - Whitespace: 24px section rhythm, 16px card padding minimum — finance tables are dense; the chrome around them must not be.
 - Motion: 150–200ms ease-out for drawer/chip transitions; no celebratory confetti except the zero-queue state (static constellation, no animation loop). Transforming-constellation morph (Phase 2) reserved for cross-domain nav, not intra-finance.
+
+### C1.5 Extended vertical palette (v2.2 — Tier 2, owner approved)
+
+Canonical source: `client/src/styles/vertical-palette.css` (`--vp-01`…`--vp-20`, light + dark). Hues are based on the **Okabe-Ito / Paul Tol qualitative palettes, muted toward the brand's low-saturation warm aesthetic**; dark values are lightness-lifted for contrast on Deep Charcoal. Every option is pairwise distinguishable under deuteranopia, protanopia and tritanopia as far as a 20-colour muted qualitative set allows (verified by Machado et al. 2009 simulation, 100% severity, ΔE in CIELAB).
+
+| id | Name | Light | Dark | Colorblind notes |
+|---|---|---|---|---|
+| vp-01 | ochre | `#C89A45` | `#EEBF70` | Weakest vs clay under tritanopia (ΔE 6.2) — still separable |
+| vp-02 | wine | `#9A4150` | `#C36D78` | Weakest vs forest under deuteranopia (ΔE 3.7) — weakest pair in the set |
+| vp-03 | moss | `#6E9153` | `#9ABB80` | Weakest vs olive under protanopia (ΔE 5.2) |
+| vp-04 | slate | `#7A8695` | `#A5B0BF` | Cool neutral; distinct from petrol/denim by lightness |
+| vp-05 | sky | `#6FA3C0` | `#9ECDE9` | Lightest blue; safe vs slate/petrol |
+| vp-06 | mauve | `#9A7BA8` | `#C4A6D1` | Weakest vs lavender-grey under deuteranopia (ΔE 4.2) |
+| vp-07 | clay | `#B98A63` | `#D4A97F` | **BL Bohemian Lodges** (PR #20 value, unchanged) |
+| vp-08 | teal-sage | `#5F948F` | `#82B3AD` | **BLab Beta Lab** (PR #20 value, unchanged) |
+| vp-09 | bronze | `#8A7B5E` | `#AB9A7A` | **TJPGG** (PR #20 value, unchanged); weakest vs forest under protanopia (ΔE 5.2) |
+| vp-10 | rust | `#B06A45` | `#DB9571` | Warmer/deeper than clay; safe pair |
+| vp-11 | olive | `#A08D4C` | `#CCB87A` | Weakest vs moss under protanopia (ΔE 5.2) |
+| vp-12 | petrol | `#4F7482` | `#7B9DAA` | Weakest vs plum under protanopia (ΔE 5.1) and vs denim under tritanopia (ΔE 5.6) |
+| vp-13 | plum | `#8A5F7D` | `#B389A5` | See vp-12 |
+| vp-14 | forest | `#527456` | `#7C9D7F` | See vp-02 / vp-09 |
+| vp-15 | lavender-grey | `#8E8AA8` | `#B9B5D2` | See vp-06 |
+| vp-16 | denim | `#5A6FA6` | `#8798CD` | See vp-12 |
+| vp-17 | sand | `#C9B491` | `#D8C4A3` | Pale warm neutral; weakest vs celadon under protanopia (ΔE 5.9) |
+| vp-18 | pewter | `#6F6E72` | `#98979B` | Neutral grey; separated from slate by hue/warmth |
+| vp-19 | blush | `#C79C9C` | `#E6BDBC` | Weakest vs celadon under deuteranopia (ΔE 4.5) |
+| vp-20 | celadon | `#9DB89A` | `#B4CDB1` | See vp-17 / vp-19 |
+
+**Weakest pairs (Machado simulation, light mode, ΔE CIELAB):** deuteranopia — wine/forest 3.7 · mauve/lavender-grey 4.2 · blush/celadon 4.5; protanopia — petrol/plum 5.1 · moss/olive 5.2 · bronze/forest 5.2; tritanopia — petrol/denim 5.6 · ochre/clay 6.2. Guidance: avoid assigning a weak pair to verticals that routinely render side-by-side; the chip's code text always carries the disambiguation, and Tier 3 pattern fills are the structural answer.
+
+**Usage rules:** the picker offers these 20 options only (plus the Tier-1 defaults already assigned); vp tokens are assignment targets, not new brand accents — they never appear on CTAs, links, or focus rings. The `--vertical-bl/blab/tjpgg` tokens in `client/src/index.css` stay as literals (no cross-file `var()` dependency) and mirror vp-07/08/09; `vertical-palette.css` is the canonical source if they ever change. **Roadmap (Tier 3):** custom colours and pattern fills for >20 verticals; patterns (hatch/dot/stripe set) double as redundant encoding for colorblind users on charts and chips.
 
 ---
 
@@ -264,10 +304,10 @@ Repo: `client/src` (React + tRPC + shadcn-style `components/ui`, sonner toasts, 
 ---
 
 ## G6 amendment summary (carried + updated)
-Round-1's G6 findings stand with two edits: the role-gating acceptance item now tests **the §4.3 matrix verbatim** (EA-full can post/resolve on assigned verticals; EA read_only cannot; Unassigned absence for non-admins; co-admin scoping) under blind + read_only + EA-full test accounts; and the brand audit (checklist E18) tests against C1 tokens — 6-colour rainbow + 5 foundation + 3 owner-approved vertical hues (BL/BLab/TJPGG) only, Deep Charcoal dark base, Outfit 700 headings, tabular numerals, no blue-purple gradients, constellation per §2/§8 of BRANDING.md.
+Round-1's G6 findings stand with two edits: the role-gating acceptance item now tests **the §4.3 matrix verbatim** (EA-full can post/resolve on assigned verticals; EA read_only cannot; Unassigned absence for non-admins; co-admin scoping) under blind + read_only + EA-full test accounts; and the brand audit (checklist E18) tests against C1 tokens — v2.2 3-tier model: 6-colour rainbow defaults + 5 foundation + 20-option extended palette (`--vp-01…--vp-20`, BL/BLab/TJPGG = vp-07/08/09) only, Deep Charcoal dark base, Outfit 700 headings, tabular numerals, no blue-purple gradients, constellation per §2/§8 of BRANDING.md.
 
-## Brand-asset gaps for owner attention — v2.1 status: ALL CLOSED
-1. **BL / BLab / TJPGG vertical hues — CLOSED.** Owner approved derived low-saturation warm-palette hues instead of rainbow reuse: BL `#B98A63` light / `#D4A97F` dark (warm clay, hospitality), BLab `#5F948F` light / `#82B3AD` dark (muted teal-sage, R&D), TJPGG `#8A7B5E` light / `#AB9A7A` dark (bronze, holding). Tokens `--vertical-bl` / `--vertical-blab` / `--vertical-tjpgg` added to the token layer (`client/src/index.css` + §C1.1) and Tailwind map (§C1.2). Display names owner-confirmed: BL = "Bohemian Lodges" (code `BL`), BLab = "Bohemian Labs", TJPGG = "TJ Perkins Global Group". Code text still carries the load per the colorblind rule.
+## Brand-asset gaps for owner attention — v2.1 status: ALL CLOSED (v2.2: BLab name corrected)
+1. **BL / BLab / TJPGG vertical hues — CLOSED.** Owner approved derived low-saturation warm-palette hues instead of rainbow reuse: BL `#B98A63` light / `#D4A97F` dark (warm clay, hospitality), BLab `#5F948F` light / `#82B3AD` dark (muted teal-sage, R&D), TJPGG `#8A7B5E` light / `#AB9A7A` dark (bronze, holding). Tokens `--vertical-bl` / `--vertical-blab` / `--vertical-tjpgg` added to the token layer (`client/src/index.css` + §C1.1) and Tailwind map (§C1.2); v2.2 maps them to vp-07/08/09 of the extended palette (§C1.5), hexes unchanged. Display names owner-confirmed: BL = "Bohemian Lodges" (code `BL`), **BLab = "Beta Lab"** (betalab.com; v2.2 correction — "Bohemian Labs" retired), TJPGG = "TJ Perkins Global Group". Code text still carries the load per the colorblind rule.
 2. **Outfit font files — CLOSED.** Self-hosting approved and implemented: `@font-face` blocks for Outfit 300/700, Inter 400/500/600 in `client/src/styles/fonts.css`, served from `/fonts/*.woff2` (`client/public/fonts/`). `scripts/fetch-fonts.sh` downloads the exact woff2 binaries from Google Fonts (css2 API → fonts.gstatic.com); all three families are OFL-licensed (see `client/public/fonts/README.md`). No Google Fonts `<link>` in `client/index.html` — self-host only.
 3. **JetBrains Mono — CLOSED.** Approved as `--font-mono` (400/500 self-hosted alongside Outfit/Inter); used for agent IDs, hashes, codes, and tabular ledger figures with `font-variant-numeric: tabular-nums`.
 4. **Redaction label copy — CLOSED.** Final en-US copy deck quoted in §C2.7 and implemented as exported constants in `client/src/lib/financeCopy.ts`; per-vertical `financeRedactedLabel` defaults to "Internal — another vertical" (admin-overridable per plan §2.5).
