@@ -3,7 +3,7 @@
  *
  * Animated node-graph modal for the "Reconnect All" flow.
  * Shows each disconnected Google account as a node that transitions:
- *   red (disconnected) → amber (in progress) → green (reconnected)
+ *   red (disconnected) → amber (in progress) → brand teal #2AAFA9 (reconnected)
  *
  * State is persisted in sessionStorage so it survives OAuth redirect round-trips.
  *
@@ -25,6 +25,13 @@
  *    lands on a page that clears the URL before the hook can read it.
  * 3. Settings.tsx direct `reconnect_success` toast handler is now guarded: it only
  *    fires when there is NO active reconnect sequence in sessionStorage.
+ *
+ * FIX (Aug 7 2026):
+ * The "done" state previously used `bg-primary`, but the global `--primary` token
+ * is Tailwind blue-700 in both light and dark mode — so completed nodes rendered
+ * blue instead of brand green-teal. Done state now uses explicit brand Vivid Teal
+ * (#2AAFA9) per BRANDING.md, independent of the global primary token. Sequence is
+ * now visually red → amber → teal as designed.
  */
 import { useEffect, useState } from "react";
 import { trpc } from "@/lib/trpc";
@@ -32,6 +39,10 @@ import { toast } from "sonner";
 import { GeevesConstellationMark } from "@/components/GeevesLogo";
 
 const STORAGE_KEY = "geeves_reconnect_sequence";
+
+/** Brand Vivid Teal (#2AAFA9) — the "connected/done" colour, per BRANDING.md.
+ *  Explicit hex so it does not inherit the off-brand blue global --primary token. */
+const TEAL = "#2AAFA9";
 
 export interface SequenceAccount {
   accountEmail: string;
@@ -168,7 +179,7 @@ function AccountNode({ account, index, total }: NodeProps) {
 
   const nodeColor =
     account.status === "done"
-      ? "bg-primary border-primary shadow-primary/40"
+      ? "bg-[#2AAFA9] border-[#2AAFA9] shadow-[#2AAFA9]/40"
       : account.status === "in_progress"
       ? "bg-amber-500 border-amber-400 shadow-amber-500/40 animate-pulse"
       : account.status === "error"
@@ -177,7 +188,7 @@ function AccountNode({ account, index, total }: NodeProps) {
 
   const labelColor =
     account.status === "done"
-      ? "text-primary"
+      ? "text-[#2AAFA9]"
       : account.status === "in_progress"
       ? "text-amber-400"
       : account.status === "error"
@@ -194,7 +205,7 @@ function AccountNode({ account, index, total }: NodeProps) {
       : "Disconnected";
 
   const connectorColor =
-    account.status === "done" ? "bg-primary/60" : "bg-muted/40";
+    account.status === "done" ? "bg-[#2AAFA9]/60" : "bg-muted/40";
 
   return (
     <div className="flex flex-col items-center">
@@ -218,7 +229,7 @@ function AccountNode({ account, index, total }: NodeProps) {
           @keyframes constellation-pulse {
             0% { transform: scale(1); box-shadow: 0 0 0 0 currentColor; }
             50% { transform: scale(1.05); }
-            100% { transform: scale(1); box-shadow: 0 0 12px 4px rgba(0, 200, 180, 0.3); }
+            100% { transform: scale(1); box-shadow: 0 0 12px 4px rgba(42, 175, 169, 0.3); }
           }
         `}</style>
         {/* Constellation logo mark */}
@@ -228,7 +239,7 @@ function AccountNode({ account, index, total }: NodeProps) {
 
         {/* Done checkmark overlay */}
         {account.status === "done" && (
-          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-primary border-2 border-background flex items-center justify-center">
+          <div className="absolute -top-1 -right-1 w-5 h-5 rounded-full bg-[#2AAFA9] border-2 border-background flex items-center justify-center">
             <svg viewBox="0 0 12 12" className="w-3 h-3" fill="none">
               <path d="M2 6l3 3 5-5" stroke="white" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
@@ -255,7 +266,7 @@ function AccountNode({ account, index, total }: NodeProps) {
       {!isLast && (
         <div
           className={`w-0.5 h-6 mt-2 transition-colors duration-700 ${
-            account.status === "done" ? "bg-primary/60" : "bg-muted/40"
+            account.status === "done" ? "bg-[#2AAFA9]/60" : "bg-muted/40"
           }`}
         />
       )}
@@ -417,7 +428,7 @@ export function ReconnectSequenceModal({ onClose, onAllDone }: Props) {
             </p>
           )}
           {allDone && (
-            <p className="text-sm text-primary mt-1">
+            <p className="text-sm mt-1" style={{ color: TEAL }}>
               Calendar sync and shadow blocks are active ✓
             </p>
           )}
@@ -459,7 +470,7 @@ export function ReconnectSequenceModal({ onClose, onAllDone }: Props) {
             </div>
             <div className="h-1.5 bg-muted rounded-full overflow-hidden">
               <div
-                className="h-full bg-primary rounded-full transition-all duration-700"
+                className="h-full bg-[#2AAFA9] rounded-full transition-all duration-700"
                 style={{ width: `${(doneCount / total) * 100}%` }}
               />
             </div>
