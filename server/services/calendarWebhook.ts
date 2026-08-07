@@ -197,20 +197,45 @@ export async function performIncrementalSync(
         }
         // ── End shadow-block guard ─────────────────────────────────────────
 
+        // Aug 8 2026 (fix/recurring-delete-resurrection): a 'cancelled' tombstone
+        // must DELETE the local row, not upsert a row with status='cancelled'.
+        // Previously every tombstone re-created an events row, so a series deleted
+        // with scope=all/following resurrected on the calendar after the webhook
+        // sync that confirmed the deletion — making series deletes look broken.
+        if (converted.status === "cancelled") {
+          if (gEvent.id) {
+            const drizzleDb = await db.getDb();
+            if (drizzleDb) {
+              const { sql: rawSql } = await import("drizzle-orm");
+              const found: any = await drizzleDb.execute(rawSql`SELECT id FROM events WHERE calendarId = ${calendarId} AND externalId = ${gEvent.id} LIMIT 1`);
+              const row = Array.isArray(found) ? (Array.isArray(found[0]) ? found[0][0] : found[0]) : null;
+              if (row?.id) {
+                await db.deleteEvent(row.id);
+                onEventDeleted(row.id).catch(e => console.warn("[Sync] Propagation delete failed:", e));
+              }
+            }
+          }
+          synced++;
+          emitCalendarEvent(householdId, "deleted", {
+            calendarId,
+            externalId: gEvent.id,
+            title: converted.title,
+            startTime: converted.startTime,
+            endTime: converted.endTime,
+          });
+          continue;
+        }
+
         const upserted = await db.upsertEvent({
           id: randomUUID(),
           ...converted,
-          status: converted.status as "confirmed" | "tentative" | "cancelled",
+          status: converted.status as "confirmed" | "tentative",
           calendarId,
           householdId,
           source: "sync",
         });
         // Propagate blocker events to all target Google Calendars
-        if (converted.status === "cancelled") {
-          onEventDeleted(upserted.id).catch(e => console.warn("[Sync] Propagation delete failed:", e));
-        } else {
-          onEventUpserted(upserted.id, householdId).catch(e => console.warn("[Sync] Propagation upsert failed:", e));
-        }
+        onEventUpserted(upserted.id, householdId).catch(e => console.warn("[Sync] Propagation upsert failed:", e));
         synced++;
         // Emit real-time update so CalendarView auto-refetches
         emitCalendarEvent(householdId, converted.status === "cancelled" ? "deleted" : "updated", {
