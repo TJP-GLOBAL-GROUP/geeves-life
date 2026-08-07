@@ -4,6 +4,21 @@
 -- Target: SQLite staging copy of geeves_life_v2.db  (NEVER run against the
 -- original; always cp to a throwaway file first).
 --
+-- Plan v2.2 §2.6 RELABEL: this pack is STAGING CLEANUP ONLY (SQLite,
+-- disposable copy). It provisions NO production schema. The
+-- staging→production transfer is a separate artifact:
+-- docs/finance/staging_to_production_transfer.sql (+ TRANSFER_RUNBOOK.md).
+--
+-- CHANGE LOG (changes after validation commit 72e98f9 — all other sections
+-- byte-stable):
+--   2026-08-07  §1 amended per Plan v2.2 §2.4 / Manus CRITICAL-1b (D6):
+--     * vertical_code_map gains sync_allowlisted (data flag, not prose):
+--       EXACTLY MB + MM allowlisted (realms 123145971566304 bakery /
+--       9130350512376806 MMG); all others geeves_only; PERS/FAM hard-excluded.
+--     * Geeves.Life qbo_entity -> 'pending' (realm does not exist yet, D6).
+--     * Verification block added (POST §1d–§1g).
+--     §§0,2–13 untouched.
+--
 -- IDEMPOTENCY CONTRACT
 --   * All DML is idempotent in pure SQL (INSERT OR IGNORE / value-guards /
 --     status-guards). Running the whole file a second time changes nothing.
@@ -75,6 +90,17 @@ SELECT COUNT(*) AS post_s0_tables FROM sqlite_master
 -- ============================================================================
 -- §1  CANONICAL REGISTRY (Gate G1) — vertical_code_map + verticals backfill
 -- Safeguards: snapshot pre_B1 · dry-run report · changes logged in B1 batch.
+-- AMENDED 2026-08-07 (Plan v2.2 §2.4 / Manus CRITICAL-1b, owner decision D6):
+--   * Registry gains sync_allowlisted (BOOLEAN as SQLite INTEGER 0/1,
+--     NOT NULL DEFAULT 0) — D6 enforced by DATA, not prose.
+--   * EXACTLY TWO rows allowlisted (the only QBO realms that may sync):
+--       MB  — Maxfield Bakery   realm 123145971566304
+--       MM  — Maxfield Market   realm 9130350512376806  (MMG)
+--     Everything else is geeves_only (sync_allowlisted = 0) but
+--     export-ready; PERS/FAM are HARD-EXCLUDED (qbo_entity 'n/a',
+--     sync_allowlisted = 0 — structural, not a preference).
+--   * Geeves.Life row qbo_entity -> 'pending' (D6: realm does not exist yet).
+--   Verification: POST §1d–§1g below.
 -- ============================================================================
 BEGIN IMMEDIATE;
 
@@ -86,27 +112,43 @@ CREATE TABLE IF NOT EXISTS vertical_code_map (
   account_prefix   TEXT,
   is_system_bucket INTEGER NOT NULL DEFAULT 0,
   qbo_entity       TEXT,
+  sync_allowlisted INTEGER NOT NULL DEFAULT 0,
   status           TEXT NOT NULL DEFAULT 'active'
                    CHECK (status IN ('active','retired','merged')),
   merged_into      TEXT REFERENCES vertical_code_map(staging_code),
   notes            TEXT
 );
 
--- 12-row seed per Plan §2 (D1/D2/D3 locked).
+-- 12-row seed per Plan §2 (D1/D2/D3 locked), v2.2 §2.4 sync_allowlisted (D6).
 INSERT OR IGNORE INTO vertical_code_map
-  (staging_code, doc_code, display_name, doc_display_name, account_prefix, is_system_bucket, qbo_entity, status, merged_into, notes) VALUES
-  ('MB',   'BKY',  'Maxfield Bakery',     'Maxfield Bakery',        'MB',    0, 'Maxfield Bakery QBO',           'active',  NULL,   'Jamaican Ltd (83% owned) — corporate return + GCT; Form 5471/CFC/GILTI for US owner (Plan §5)'),
-  ('MM',   'MKT',  'Maxfield Market',     'Maxfield Market Global', 'MM',    0, 'Maxfield Market Global LLC QBO','active',  NULL,   'ecommerce'),
-  ('BL',   'BL',   'Bohemian Lodges',     'Blue Lagoon',            'BL',    0, 'Bohemian Lodges QBO',           'active',  NULL,   'name collision: staging "Bohemian Lodges" vs doc "Blue Lagoon" — owner confirms display name'),
-  ('GL',   'GDL',  'Geeves.Life',         'Good Life',              'GL',    0, 'Geeves.Life QBO (new)',         'active',  NULL,   'D3: staging GL keeps code (has data); doc "Good Life" retired to GDL (no data)'),
-  ('SO',   'SO',   'StartOut',            'StartOut',               'SO',    0, 'StartOut QBO',                  'active',  NULL,   'StartOut labeled work'),
-  ('BLab', 'BLAB', 'Beta Lab',            'B.Lab',                  'BLab',  0, 'Beta Lab QBO',                  'active',  NULL,   'betalabpro.com — confirm status; GL/BLab spend currently intended to post into TJP accounts (TJP-500 note) — design fork needed before G3'),
-  ('PERS', 'PERS', 'Personal',            'Personal',               'PERS',  0, 'n/a',                           'active',  NULL,   'absorbs SELF (D1); hard geeves_only'),
-  ('FAM',  'FAM',  'Family',              'Family',                 'FAM',   0, 'n/a',                           'active',  NULL,   'staging-only; hard geeves_only'),
-  ('TJPGG','TJPGG','TJP Global Group',    'TJP Global Group',       'TJP',   0, 'TJP Global Group QBO',          'active',  NULL,   'registered 2026-08-07; accounts use TJP- prefix, not TJPGG- (invariant 7)'),
-  ('SELF', 'SELF', 'Self / Tarik',        'Self / Tarik',           NULL,    0, 'n/a',                           'merged',  'PERS', 'D1: zero rows anywhere — doc-side fold only; none deductible post-fold (Form 2106/Sch A suspended through TY2025)'),
-  ('REV',  'REV',  'Needs Review',        'Needs Review',           'REV',   1, 'n/a',                           'active',  NULL,   'system bucket: queue — never posts to G.L.'),
-  ('MULTI','MULTI','Multi-Vertical Rail', 'Multi-Vertical Rail',    'MULTI', 1, 'n/a',                           'active',  NULL,   'system bucket: rails/clearing (stripe, 7 transfer_pairs / $33,246.51) — never P&L; registered 2026-08-07');
+  (staging_code, doc_code, display_name, doc_display_name, account_prefix, is_system_bucket, qbo_entity, sync_allowlisted, status, merged_into, notes) VALUES
+  ('MB',   'BKY',  'Maxfield Bakery',     'Maxfield Bakery',        'MB',    0, 'Maxfield Bakery QBO',           1, 'active',  NULL,   'Jamaican Ltd (83% owned) — corporate return + GCT; Form 5471/CFC/GILTI for US owner (Plan §5). D6 allowlisted realm 123145971566304'),
+  ('MM',   'MKT',  'Maxfield Market',     'Maxfield Market Global', 'MM',    0, 'Maxfield Market Global LLC QBO',1, 'active',  NULL,   'ecommerce. D6 allowlisted realm 9130350512376806 (MMG)'),
+  ('BL',   'BL',   'Bohemian Lodges',     'Blue Lagoon',            'BL',    0, 'Bohemian Lodges QBO',           0, 'active',  NULL,   'name collision: staging "Bohemian Lodges" vs doc "Blue Lagoon" — owner confirms display name; geeves_only per D6'),
+  ('GL',   'GDL',  'Geeves.Life',         'Good Life',              'GL',    0, 'pending',                       0, 'active',  NULL,   'D3: staging GL keeps code (has data); doc "Good Life" retired to GDL (no data). v2.2 §2.4/CRITICAL-1b: qbo_entity pending — D6 realm does not exist yet'),
+  ('SO',   'SO',   'StartOut',            'StartOut',               'SO',    0, 'StartOut QBO',                  0, 'active',  NULL,   'StartOut labeled work; geeves_only per D6'),
+  ('BLab', 'BLAB', 'Beta Lab',            'B.Lab',                  'BLab',  0, 'Beta Lab QBO',                  0, 'active',  NULL,   'betalabpro.com — confirm status; GL/BLab spend currently intended to post into TJP accounts (TJP-500 note) — design fork needed before G3; geeves_only per D6'),
+  ('PERS', 'PERS', 'Personal',            'Personal',               'PERS',  0, 'n/a',                           0, 'active',  NULL,   'absorbs SELF (D1); HARD geeves_only — structurally excluded from QBO sync (D6)'),
+  ('FAM',  'FAM',  'Family',              'Family',                 'FAM',   0, 'n/a',                           0, 'active',  NULL,   'staging-only; HARD geeves_only — structurally excluded from QBO sync (D6)'),
+  ('TJPGG','TJPGG','TJP Global Group',    'TJP Global Group',       'TJP',   0, 'TJP Global Group QBO',          0, 'active',  NULL,   'registered 2026-08-07; accounts use TJP- prefix, not TJPGG- (invariant 7); geeves_only per D6'),
+  ('SELF', 'SELF', 'Self / Tarik',        'Self / Tarik',           NULL,    0, 'n/a',                           0, 'merged',  'PERS', 'D1: zero rows anywhere — doc-side fold only; none deductible post-fold (Form 2106/Sch A suspended through TY2025)'),
+  ('REV',  'REV',  'Needs Review',        'Needs Review',           'REV',   1, 'n/a',                           0, 'active',  NULL,   'system bucket: queue — never posts to G.L.; never syncs'),
+  ('MULTI','MULTI','Multi-Vertical Rail', 'Multi-Vertical Rail',    'MULTI', 1, 'n/a',                           0, 'active',  NULL,   'system bucket: rails/clearing (stripe, 7 transfer_pairs / $33,246.51) — never P&L; registered 2026-08-07; never syncs');
+
+-- v2.2 §2.4: add the D6 data flag on DBs seeded before this amendment.
+-- (On a fresh DB the CREATE above already has the column and this raises
+-- "duplicate column name" — benign skip per the header contract.)
+ALTER TABLE vertical_code_map ADD COLUMN sync_allowlisted INTEGER NOT NULL DEFAULT 0;  -- [IDEMPOTENT-DDL]
+
+-- D6 enforcement as value-guarded DML (covers pre-amendment seeds where the
+-- INSERT OR IGNORE above is a no-op; re-runnable).
+UPDATE vertical_code_map SET sync_allowlisted = 1
+ WHERE staging_code IN ('MB','MM') AND sync_allowlisted <> 1;
+UPDATE vertical_code_map SET sync_allowlisted = 0
+ WHERE staging_code NOT IN ('MB','MM') AND sync_allowlisted <> 0;
+-- CRITICAL-1b: GL realm does not exist yet.
+UPDATE vertical_code_map SET qbo_entity = 'pending'
+ WHERE staging_code = 'GL' AND qbo_entity <> 'pending';
 
 -- verticals: add registry columns (tagged idempotent DDL — see header).
 ALTER TABLE verticals ADD COLUMN is_system_bucket INTEGER NOT NULL DEFAULT 0;  -- [IDEMPOTENT-DDL]
@@ -129,6 +171,13 @@ SELECT 'B01-registry', 'verticals', code, '*batch*', 'is_system_bucket/account_p
        'backfilled from vertical_code_map', 'migration_pack.sql §1', 'migration-agent'
   FROM verticals;
 
+-- v2.2 §2.4 batch log (D6 flag + GL pending). INSERT OR IGNORE keeps re-runs clean.
+INSERT OR IGNORE INTO migration_change_log (batch_id, table_name, row_id, field, old_value, new_value, script, actor) VALUES
+  ('B01-registry-sync-allowlist', 'vertical_code_map', NULL, '*batch*',
+   'no sync_allowlisted column; 2-realm allowlist unenforced (prose only); GL qbo_entity named a non-existent realm',
+   'D6 enforced by data: sync_allowlisted=1 for MB (realm 123145971566304) and MM (realm 9130350512376806) ONLY; all others geeves_only; PERS/FAM hard-excluded; GL qbo_entity=pending',
+   'migration_pack.sql §1 (Plan v2.2 §2.4 / Manus CRITICAL-1b)', 'migration-agent');
+
 COMMIT;
 
 -- POST §1a: registry row count.
@@ -141,6 +190,20 @@ SELECT COUNT(*) AS post_s1_system_buckets FROM verticals WHERE is_system_bucket 
 -- EXPECT: 11 rows total; TJPGG prefix = 'TJP'
 SELECT code, account_prefix FROM verticals WHERE code IN ('TJPGG','MULTI');
 SELECT COUNT(*) AS post_s1_verticals FROM verticals;
+-- POST §1d: D6 allowlist — EXACTLY 2 rows sync_allowlisted, and they are MB+MM.
+-- EXPECT: 2 ; rows = MB, MM
+SELECT COUNT(*) AS post_s1_allowlisted FROM vertical_code_map WHERE sync_allowlisted = 1;
+SELECT staging_code, qbo_entity, notes FROM vertical_code_map WHERE sync_allowlisted = 1 ORDER BY staging_code;
+-- POST §1e: PERS/FAM hard-excluded (allowlist flag off AND qbo_entity n/a).
+-- EXPECT: 0 violations
+SELECT COUNT(*) AS post_s1_persfam_exclusion_violations FROM vertical_code_map
+ WHERE staging_code IN ('PERS','FAM') AND (sync_allowlisted <> 0 OR qbo_entity <> 'n/a');
+-- POST §1f: GL realm pending (CRITICAL-1b). EXPECT: 'pending'
+SELECT qbo_entity AS post_s1_gl_qbo_entity FROM vertical_code_map WHERE staging_code = 'GL';
+-- POST §1g: no allowlisted system buckets or retired/merged rows.
+-- EXPECT: 0
+SELECT COUNT(*) AS post_s1_allowlist_scope_guard FROM vertical_code_map
+ WHERE sync_allowlisted = 1 AND (is_system_bucket <> 0 OR status <> 'active');
 
 -- ============================================================================
 -- §2  ACCOUNTS GHOST-ROW REPAIR (Plan §1 baseline / §3.2)
@@ -889,4 +952,6 @@ SELECT COUNT(*) AS post_s13_cols FROM pragma_table_info('anchor_cache')
 -- bucketing), D5 (2 NULL currencies), D6 (realm list), plus per-row
 -- confirmation flags in §11 notes and the dedupe_conflict_queue (65) /
 -- h5_conflict_queue (17) workbenches.
+-- NEXT STEP (Plan v2.2 §2.6): staging→production transfer —
+-- docs/finance/staging_to_production_transfer.sql + TRANSFER_RUNBOOK.md.
 -- ============================================================================
