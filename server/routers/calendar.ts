@@ -369,7 +369,9 @@ export const calendarRouter = router({
           : Promise.resolve([] as Awaited<ReturnType<typeof db.getPropertyBookingsForHousehold>>),
       ]);
       // Full-access events
-      const visibleEvents = allEvents.filter(e => fullAccessCalendarIds.has(e.calendarId));
+      // Aug 8 2026 (fix/recurring-delete-resurrection): hide cancelled tombstones —
+        // deleted events (incl. series deletes) must not render on the calendar
+        const visibleEvents = allEvents.filter(e => fullAccessCalendarIds.has(e.calendarId) && e.status !== "cancelled");
       const busyOnlyEvents = allEvents
         .filter(e => busyOnlyCalendarIds.has(e.calendarId))
         .map(e => {
