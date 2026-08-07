@@ -213,10 +213,10 @@ export type InsertShoppingSessionItem = typeof shoppingSessionItems.$inferInsert
 export const platformCredentials = mysqlTable("platform_credentials", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
-  platform: varchar("platform", { length: 100 }),
+  platform: varchar("platform", { length: 100 }).notNull(),
   credentialData: json("credentialData"),
   isActive: boolean("isActive").default(true),
-  lastActiveAt: timestamp("lastActiveAt"),
+  lastUsedAt: timestamp("lastUsedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
