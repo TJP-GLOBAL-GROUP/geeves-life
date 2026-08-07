@@ -223,8 +223,10 @@ export function setupGoogleAccountConnect(app: Express) {
         });
       } else if (action === "reconnect_account") {
         console.log(`[AccountConnect] Reconnect — skipping calendar discovery for ${profile.email} (all assignments preserved)`);
-        // Trigger a full sync for all existing calendars so events are immediately
-        // refreshed with the new token (clears stale sync tokens from old environment).
+        // Recovery: full sync WITH propagation for all existing calendars so events
+        // created while the account was disconnected are pulled in AND generate their
+        // shadow blocks; then re-register push webhook channels so new changes resume
+        // flowing immediately instead of waiting for the next server restart.
         if (purposes.includes("calendar_sync")) {
           triggerFullSyncForReconnectedAccount(
             member.householdId,
@@ -232,7 +234,7 @@ export function setupGoogleAccountConnect(app: Express) {
             profile.email,
             tokens.accessToken
           ).catch((err: unknown) => {
-            console.error(`[AccountConnect] Post-reconnect full sync failed for ${profile.email}:`, err);
+            console.error(`[AccountConnect] Post-reconnect recovery failed for ${profile.email}:`, err);
           });
         }
       } else {
@@ -374,9 +376,25 @@ async function autoDiscoverCalendarsForAccount(
 }
 
 /**
- * After a reconnect, perform a full sync for all calendars belonging to the reconnected
- * account. This clears stale sync tokens (e.g. from a JWT_SECRET rotation after migration)
- * and pulls all recent events immediately without waiting for the next webhook push.
+ * After a reconnect, recover all calendars belonging to the reconnected account:
+ *
+ *  1. Full sync WITH propagation — uses performFullSyncForCalendar from
+ *     calendarWebhook.ts, which routes every upserted/deleted event through
+ *     onEventUpserted/onEventDeleted (with the shadow-block loop guard and
+ *     orphan cleanup). Events created while the account was disconnected are
+ *     therefore not just pulled into the events table — they also generate
+ *     their shadow blocks immediately. (Previously this used a bare upsert
+ *     with no propagation, so recovered events never produced shadow blocks.)
+ *
+ *  2. Webhook channel re-registration — push channels are otherwise only
+ *     (re)registered at server startup. Without this, a reconnected account
+ *     has no live push channel until the next deploy/restart, and events
+ *     created after reconnection never trigger an incremental sync.
+ *
+ * FIX (Aug 7 2026): both gaps were identified after a token-expiry incident
+ * where a test event created during the disconnect window synced into the DB
+ * but never propagated, and a second test event created after reconnection
+ * was never detected at all.
  */
 async function triggerFullSyncForReconnectedAccount(
   householdId: string,
@@ -384,47 +402,45 @@ async function triggerFullSyncForReconnectedAccount(
   accountEmail: string,
   accessToken: string
 ): Promise<void> {
-  const { performFullSync } = await import("../services/googleCalendarSync");
-  const { emitSyncStatus } = await import("../realtime");
-  console.log(`[AccountConnect] Post-reconnect full sync starting for ${accountEmail}`);
+  const { performFullSyncForCalendar, registerWebhookChannelForCalendar } =
+    await import("../services/calendarWebhook");
+  console.log(`[AccountConnect] Post-reconnect recovery starting for ${accountEmail}`);
   try {
     const allCalendars = await db.getCalendars(householdId);
     const accountCalendars = allCalendars.filter((c: any) => c.accountEmail === accountEmail);
     if (accountCalendars.length === 0) {
-      console.log(`[AccountConnect] No calendars found for ${accountEmail} — skipping post-reconnect sync`);
+      console.log(`[AccountConnect] No calendars found for ${accountEmail} — skipping post-reconnect recovery`);
       return;
     }
-    console.log(`[AccountConnect] Post-reconnect: syncing ${accountCalendars.length} calendar(s) for ${accountEmail}`);
+    console.log(`[AccountConnect] Post-reconnect: recovering ${accountCalendars.length} calendar(s) for ${accountEmail}`);
     let synced = 0;
     let errors = 0;
+    let webhooks = 0;
     for (const cal of accountCalendars) {
       if (!cal.externalId) {
         console.warn(`[AccountConnect] Skipping calendar "${cal.name}" — no externalId`);
         continue;
       }
       try {
-        emitSyncStatus(householdId, cal.id, "syncing");
-        // Clear stale sync token so performFullSync does a clean pull from Google
+        // Clear stale sync token so the next incremental sync starts clean
         await db.updateCalendarSyncToken(cal.id, "");
-        await performFullSync(accessToken, cal.externalId, cal.id, householdId, {
-          upsertEvent: async (event) => {
-            await db.upsertEvent({ id: randomUUID(), ...event, source: "sync" });
-          },
-          updateSyncToken: async (calId: string, token: string) => {
-            await db.updateCalendarSyncToken(calId, token);
-          },
-        });
-        emitSyncStatus(householdId, cal.id, "synced");
+        // Full sync WITH propagation + shadow-block guard + orphan cleanup
+        await performFullSyncForCalendar(cal.id, householdId, cal.externalId, accessToken);
         console.log(`[AccountConnect] Post-reconnect sync complete for "${cal.name}" (${accountEmail})`);
         synced++;
       } catch (syncErr: unknown) {
-        emitSyncStatus(householdId, cal.id, "error", String(syncErr));
         console.warn(`[AccountConnect] Post-reconnect sync failed for "${cal.name}":`, syncErr);
         errors++;
       }
+      try {
+        // Restore the push channel so new changes resume flowing immediately
+        if (await registerWebhookChannelForCalendar(cal.id)) webhooks++;
+      } catch (webhookErr: unknown) {
+        console.warn(`[AccountConnect] Webhook re-registration failed for "${cal.name}":`, webhookErr);
+      }
     }
-    console.log(`[AccountConnect] Post-reconnect full sync done for ${accountEmail}: ${synced} synced, ${errors} errors`);
+    console.log(`[AccountConnect] Post-reconnect recovery done for ${accountEmail}: ${synced} synced, ${errors} errors, ${webhooks} webhook channel(s) registered`);
   } catch (err: unknown) {
-    console.error(`[AccountConnect] Post-reconnect full sync error for ${accountEmail}:`, err);
+    console.error(`[AccountConnect] Post-reconnect recovery error for ${accountEmail}:`, err);
   }
 }

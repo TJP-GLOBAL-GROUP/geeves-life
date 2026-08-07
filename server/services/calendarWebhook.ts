@@ -244,8 +244,14 @@ export async function performIncrementalSync(
 
 /**
  * Perform a full sync for a calendar.
+ *
+ * Exported (Aug 7 2026) so the reconnect recovery flow in googleAccountConnect.ts
+ * can reuse this exact path — it propagates upserts/deletes through
+ * onEventUpserted/onEventDeleted (so events created while an account was
+ * disconnected generate their shadow blocks on recovery), applies the
+ * shadow-block loop guard, and performs orphan cleanup.
  */
-async function performFullSyncForCalendar(
+export async function performFullSyncForCalendar(
   calendarId: string,
   householdId: string,
   googleCalendarId: string,
@@ -391,7 +397,71 @@ export async function getAccessTokenForCalendar(calendarId: string, memberId: st
   return null;
 }
 
-// ─── Webhook Registration (Startup) ──────────────────────────────
+// ─── Webhook Registration ──────────────────────────────────────────
+
+/**
+ * Register (or renew) a push webhook channel for a single calendar.
+ *
+ * Extracted (Aug 7 2026) from registerAllWebhooks so the reconnect recovery
+ * flow can restore push notifications for a reconnected account's calendars
+ * immediately — previously channels were only (re)registered at server
+ * startup, which meant a reconnected account had no live push channel until
+ * the next deploy/restart, and new events created after reconnection were
+ * never synced until then.
+ *
+ * Mirrors the startup-loop guards: skips Google-managed read-only calendars,
+ * skips calendars with an active non-expiring channel (unless the stored
+ * notification URL is stale), and skips calendars with no usable token.
+ *
+ * Returns true if a new channel was registered.
+ */
+export async function registerWebhookChannelForCalendar(calendarId: string): Promise<boolean> {
+  const appUrl = process.env.APP_URL || process.env.VITE_APP_URL;
+  if (!appUrl) {
+    console.log("[Webhook] APP_URL not set — cannot register channel");
+    return false;
+  }
+
+  const calendar = await db.getCalendar(calendarId);
+  if (!calendar || !calendar.externalId) return false;
+
+  // P-26: Google-managed read-only calendars reject push notification setup (HTTP 400)
+  if (calendar.externalId.includes('group.v.calendar.google.com')) return false;
+
+  const webhookUrl = `${appUrl}/api/webhooks/google-calendar`;
+
+  // Skip if an active, non-expiring channel with a current URL already exists
+  const existing = await db.getWebhookChannel(calendar.id);
+  const expiresAt = existing?.expiresAt ? Number(existing.expiresAt) : 0;
+  const soonExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24h from now
+  const urlMismatch = existing?.notificationUrl && existing.notificationUrl !== webhookUrl;
+  if (existing && expiresAt > soonExpiry && !urlMismatch) return false;
+
+  const accessToken = await getAccessTokenForCalendar(calendar.id, calendar.memberId);
+  if (!accessToken) {
+    console.warn(`[Webhook] No access token for calendar ${calendar.id} (${calendar.name}) — skipping`);
+    return false;
+  }
+
+  const channelId = randomUUID();
+  const result = await setupWebhookChannel(accessToken, calendar.externalId, webhookUrl, channelId);
+  if (existing) await db.expireWebhookChannel(existing.id);
+  await db.createWebhookChannel({
+    id: channelId,
+    householdId: calendar.householdId,
+    calendarId: calendar.id,
+    resourceId: result.resourceId,
+    resourceUri: null,
+    // P-51: Store the notification URL so future startups can detect stale channels
+    notificationUrl: webhookUrl,
+    // Google returns expiration as a Unix-ms string; parseInt handles both forms
+    expiresAt: parseInt(result.expiration, 10),
+    token: null,
+    status: "active",
+  });
+  console.log(`[Webhook] Registered channel for ${calendar.name} (${calendar.id}), expires ${result.expiration}`);
+  return true;
+}
 
 /**
  * On server startup, register Google Calendar push webhooks for all calendars
@@ -405,61 +475,13 @@ export async function registerAllWebhooks(): Promise<void> {
   }
   try {
     const allCalendars = await db.getAllGoogleCalendars();
-    const webhookUrl = `${appUrl}/api/webhooks/google-calendar`;
     let registered = 0;
     let skipped = 0;
     for (const calendar of allCalendars) {
       try {
-        // P-26: Skip webhook registration for Google-managed read-only calendars.
-        // group.v.calendar.google.com calendars (holidays, shared read-only feeds)
-        // reject push notification setup with HTTP 400 errors.
-        if (calendar.externalId?.includes('group.v.calendar.google.com')) {
-          skipped++;
-          continue;
-        }
-        // Check if there's already an active, non-expiring channel
-        const existing = await db.getWebhookChannel(calendar.id);
-        const expiresAt = existing?.expiresAt ? Number(existing.expiresAt) : 0;
-        const soonExpiry = Date.now() + 24 * 60 * 60 * 1000; // 24h from now
-        // P-51: Force-renew if the stored notification URL doesn't match the current APP_URL.
-        // This handles server URL changes (e.g. new sandbox deployment) that would cause Google
-        // to deliver push notifications to a stale/dead URL.
-        const urlMismatch = existing?.notificationUrl && existing.notificationUrl !== webhookUrl;
-        if (existing && expiresAt > soonExpiry && !urlMismatch) {
-          skipped++;
-          continue;
-        }
-        if (urlMismatch) {
-          console.log(`[Webhook] URL mismatch for ${calendar.name} — stored: ${existing.notificationUrl} → renewing to: ${webhookUrl}`);
-        }
-        // Get access token for this calendar
-        const accessToken = await getAccessTokenForCalendar(calendar.id, calendar.memberId);
-        if (!accessToken) {
-          console.warn(`[Webhook] No access token for calendar ${calendar.id} (${calendar.name}) — skipping`);
-          continue;
-        }
-        // Register (or renew) the webhook channel
-        const { randomUUID } = await import("crypto");
-        const channelId = randomUUID();
-        const result = await setupWebhookChannel(accessToken, calendar.externalId!, webhookUrl, channelId);
-        // Expire old channel if renewing
-        if (existing) await db.expireWebhookChannel(existing.id);
-        await db.createWebhookChannel({
-          id: channelId,
-          householdId: calendar.householdId,
-          calendarId: calendar.id,
-          resourceId: result.resourceId,
-          resourceUri: null,
-          // P-51: Store the notification URL so future startups can detect stale channels
-          notificationUrl: webhookUrl,
-          // Google returns expiration as a Unix-ms string (e.g. "1750000000000"), not a date string.
-          // parseInt() handles both numeric strings and ISO strings correctly.
-          expiresAt: parseInt(result.expiration, 10),
-          token: null,
-          status: "active",
-        });
-        registered++;
-        console.log(`[Webhook] Registered channel for ${calendar.name} (${calendar.id}), expires ${result.expiration}`);
+        const didRegister = await registerWebhookChannelForCalendar(calendar.id);
+        if (didRegister) registered++;
+        else skipped++;
       } catch (err) {
         console.warn(`[Webhook] Failed to register webhook for calendar ${calendar.id}:`, err);
       }
@@ -558,6 +580,7 @@ export async function connectGoogleCalendar(opts: {
     memberId: opts.memberId,
     provider: "google_personal",  // all Google calendars use google_personal (workspace deprecated)
     externalId: opts.googleCalendarId,
+    accountEmail: undefined,
     name: opts.name,
     color: opts.color,
     syncType: "push",
@@ -582,25 +605,9 @@ export async function connectGoogleCalendar(opts: {
 
   // Set up webhook for push notifications (if we have a public URL)
   try {
-    const appUrl = process.env.APP_URL || process.env.VITE_APP_URL;
-    if (appUrl) {
-      const webhookUrl = `${appUrl}/api/webhooks/google-calendar`;
-      const channelId = randomUUID();
-      
-      const webhookResult = await setupWebhookChannel(accessToken, opts.googleCalendarId, webhookUrl, channelId);
-      
-      await db.createWebhookChannel({
-        id: channelId,
-        householdId: opts.householdId,
-        calendarId,
-        resourceId: webhookResult.resourceId,
-        resourceUri: null,
-        expiresAt: parseInt(webhookResult.expiration, 10),
-        token: null,
-        status: "active",
-      });
-      
-      console.log(`[Calendar] Webhook set up for calendar ${calendarId}, expires ${webhookResult.expiration}`);
+    const didRegister = await registerWebhookChannelForCalendar(calendarId);
+    if (!didRegister) {
+      console.log(`[Calendar] Webhook not registered for calendar ${calendarId} (already active or unavailable — will fall back to polling)`);
     }
   } catch (webhookError) {
     console.warn("[Calendar] Failed to set up webhook (will fall back to polling):", webhookError);
