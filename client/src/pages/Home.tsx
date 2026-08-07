@@ -303,9 +303,11 @@ function GreetingHeader() {
       />
 
       <div className="relative flex items-start justify-between gap-4">
-        <div className="flex items-start gap-4">
-          <div className="shrink-0 mt-1">
-            <ConstellationMark size={48} />
+        <div className="flex items-center gap-5">
+          {/* Brand mark enlarged 250% (48 → 120) for recognition; vertically centred
+              against the greeting line by centring it on the text block */}
+          <div className="shrink-0">
+            <ConstellationMark size={120} />
           </div>
           <div>
             <div className="flex items-center gap-2 mb-1">
