@@ -70,7 +70,7 @@ export const postEntryLineSchema = z.object({
 
 export const postEntrySchema = z.object({
   verticalCode: z.string().min(1).max(16),
-  entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // date column
+  entryDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // YYYY-MM-DD; stored via date column
   entryType: z.enum(["revenue", "expense", "transfer", "adjustment", "dto", "journal"]),
   reference: z.string().max(200).optional(),
   memo: z.string().optional(),
@@ -101,6 +101,17 @@ function toCents(value: string | null | undefined): number {
   const [whole, frac = ""] = value.replace(/^-/, "").split(".");
   const cents = parseInt(whole, 10) * 100 + parseInt((frac + "00").slice(0, 2), 10);
   return negative ? -cents : cents;
+}
+
+/** Integer cents → decimal string. */
+function fromCents(cents: number): string {
+  return (cents / 100).toFixed(2);
+}
+
+/** Exact decimal-string negation (money never goes through float sign flips). */
+function negateAmount(value: string | null | undefined): string | null {
+  if (value === null || value === undefined) return null;
+  return fromCents(-toCents(value));
 }
 
 /** D4: month = fiscal calendar month, everywhere. */
@@ -169,7 +180,6 @@ async function assertPeriodUnlocked(
 async function validateLines(
   db: Awaited<ReturnType<typeof requireDb>>,
   householdId: string,
-  verticalId: string,
   input: PostEntryInput,
 ): Promise<Map<string, typeof chartOfAccounts.$inferSelect>> {
   // Balance to the cent (A15).
@@ -299,7 +309,7 @@ export async function postEntry(
 
   const { fiscalYear, fiscalMonth } = fiscalPeriod(input.entryDate);
   await assertPeriodUnlocked(db, vertical.householdId, fiscalYear, fiscalMonth); // A16
-  await validateLines(db, vertical.householdId, vertical.id, input);
+  await validateLines(db, vertical.householdId, input);
 
   // ③ Resolve FX per line (transaction-date rate, immutable once stored).
   const householdCurrency = "USD"; // households.reportingCurrency; Global = USD (D7)
@@ -310,8 +320,8 @@ export async function postEntry(
     resolvedLines.push({ ...line, exchangeRate: rate, usdEquivalent });
   }
 
-  const totalDebit = (resolvedLines.reduce((a, l) => a + toCents(l.debit ?? null), 0) / 100).toFixed(2);
-  const totalCredit = (resolvedLines.reduce((a, l) => a + toCents(l.credit ?? null), 0) / 100).toFixed(2);
+  const totalDebit = fromCents(resolvedLines.reduce((a, l) => a + toCents(l.debit ?? null), 0));
+  const totalCredit = fromCents(resolvedLines.reduce((a, l) => a + toCents(l.credit ?? null), 0));
 
   // ④ Entry + lines + audit in ONE transaction (A17).
   const entryId = nanoid();
@@ -319,7 +329,7 @@ export async function postEntry(
     await tx.insert(journalEntries).values({
       id: entryId,
       householdId: vertical.householdId,
-      entryDate: input.entryDate,
+      entryDate: new Date(`${input.entryDate}T00:00:00Z`),
       fiscalYear,
       fiscalMonth,
       verticalId: vertical.id,
@@ -437,7 +447,7 @@ export async function reverseEntry(
     await tx.insert(journalEntries).values({
       id: reversalEntryId,
       householdId: original.householdId,
-      entryDate: new Date().toISOString().slice(0, 10),
+      entryDate: new Date(),
       fiscalYear: original.fiscalYear,
       fiscalMonth: original.fiscalMonth,
       verticalId: original.verticalId,
@@ -468,10 +478,10 @@ export async function reverseEntry(
         description: line.description,
         debit: line.credit ?? "0.00", // swapped
         credit: line.debit ?? "0.00",
-        amount: String(-parseFloat(line.amount)),
+        amount: negateAmount(line.amount) ?? "0.00",
         currency: line.currency,
         exchangeRate: line.exchangeRate,
-        usdEquivalent: line.usdEquivalent ? String(-parseFloat(line.usdEquivalent)) : null,
+        usdEquivalent: negateAmount(line.usdEquivalent),
         taxFormLine: line.taxFormLine,
         isTaxRelevant: line.isTaxRelevant,
         receiptId: line.receiptId,
