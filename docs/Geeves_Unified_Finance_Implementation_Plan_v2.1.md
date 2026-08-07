@@ -4,7 +4,11 @@
 **Version:** 2.1 (supersedes v2.0)
 **Date:** 2026-08-07
 **Review basis:** 5-specialist swarm review (Accounting/CPA, Database Design, Performance, Security, UI/UX), every finding independently verified against `geeves_life_v2.db`
-**Companion artifacts:** `migration_pack.sql` (executable cleanup) · `VERTICAL_GL_CATALOGS_v2.md` (regenerated catalogs) · `uiux_review_g6_report.md` (screen specs)
+**Companion artifacts (this repo):** [`docs/finance/migration_pack.sql`](finance/migration_pack.sql) (executable cleanup, idempotent, validated 2× on a staging copy) · [`docs/finance/VERTICAL_GL_CATALOGS_v2.md`](finance/VERTICAL_GL_CATALOGS_v2.md) (regenerated catalogs) · [`docs/finance/uiux_review_g6_report.md`](finance/uiux_review_g6_report.md) (round-1 screen specs — **brand-consistent revision in progress**, see below)
+
+> **⚠️ Reviewer note (2026-08-07):** This is the **correct v2.1** for pre-implementation review. The earlier "Geeves Unified Finance Implementation Plan — Draft 1 (July 29)" reviewed in `docs/FINANCE_PLAN_REVIEW.md` is a different, superseded document. A round-2 swarm reconciliation of that review against this plan is underway (outputs: `uiux_brand_review_v2.md`, `accounting_reconciliation_v2.md`, `security_merge_v2.md`, `schema_delta_v2.md`) and will be integrated into **Plan v2.2**, which supersedes this file. Known state changes already confirmed by that review: OAuth hardening **done** (commits 53f626c / 38a46d8), Cloud SQL cutover **resolved** (TiDB path removed).
+>
+> **📌 Document governance (owner directive, 2026-08-07):** all project documents and plans live in this repo (plans under `docs/`, finance workpapers under `docs/finance/`); every key document update or completed review is pushed here and recorded in the knowledge base for project-team review and access. Session-generated artifacts are never left workspace-only.
 
 ---
 
