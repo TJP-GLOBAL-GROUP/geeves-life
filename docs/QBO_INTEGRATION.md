@@ -1,61 +1,82 @@
 # QBO Integration — QuickBooks Online Sync Architecture
 
-**Status:** Design — approved-for-build pending owner review
+**Status:** Design v2 — revised to sit *after* the Ledger Cleanup Program
 **Author:** Kimi (senior full-stack partner)
-**Date:** 2026-08-06
-**Resumes:** Financial integration project (frozen 2026-07-10, Section 48 migration prep)
+**Date:** 2026-08-06 (v2 same date, post-FINANCIAL_DESIGN_PLAN review)
+**Parent design:** [`FINANCIAL_DESIGN_PLAN.md`](./FINANCIAL_DESIGN_PLAN.md) — this doc covers **Phase 4** of that roadmap only
 
 ---
 
-## 1. Context & Ground Truth (verified 2026-08-06)
+## 0. What Changed in v2 (and why)
 
-The financial integration project paused at the exact boundary between **data model** and **integration**. Verified against the live repo (main @ b376dd1):
+v1 of this doc designed the QBO export to read from the `expenses` table directly. That was wrong. Per the Financial Design Plan:
 
-**No QBO code exists:**
-- No Intuit/QuickBooks SDK in `package.json`
-- No QBO router in `server/routers/` (20 routers audited)
-- No QBO handler in `server/scheduledHandlers/` (15 handlers audited)
-- No QBO env vars in `server/_core/env.ts`
-- todo.md lines 2543–2544 ("Square Sync Failed", "QBO Sync Cron Job Failed") refer to alerts whose target was never built in this codebase. Any Cloud Scheduler job pointing at a QBO endpoint is an orphan and must be deleted (see §9).
+- The **Unified General Ledger** (`journal_entries` / `journal_lines`, merged PR #5) is the **system of record**. `expenses` is an ingestion/categorization layer whose approved rows feed the posting engine.
+- QBO is a **downstream ledger** for accountant collaboration. Exports must originate from **posted journal entries** — never from raw source tables.
+- QBO sync is **Phase 4** of the financial roadmap. Phases 2–3 (posting engine + backfill + DTO rebuild + review-queue burn-down) are the **Ledger Cleanup Program** and must complete first: exporting an unfooted ledger to QBO would fossilize bad numbers in the accountant's books.
 
-**QBO-ready schema assets already live (Section 16 / Jul 5 overhaul):**
+**Sequencing rule: no QBO feed until the trial balance foots to the V17.26 anchors ($775,524.01) on beta.**
 
-| Asset | Location | Purpose |
+---
+
+## 1. Ground Truth (verified against main @ b376dd1, 2026-08-06)
+
+**No QBO code exists:** no Intuit SDK in `package.json`; no QBO router (20 audited); no QBO handler (15 audited); no QBO env vars in `env.ts`. The todo.md "QBO/Square Sync Failed" alerts pointed at crons whose targets were never built — orphan scheduler jobs must be found and deleted (§9).
+
+**Schema assets live on main:**
+- G.L. core: `journal_entries`, `journal_lines`, `transfer_pairs`, `tax_documents`, `tax_line_items` (drizzle/schema.ts §"PHASE 1 — UNIFIED GENERAL LEDGER")
+- Seed data: `drizzle/seed_gl_accounts.sql` (~120 per-vertical G.L. accounts)
+- QBO link fields: `chart_of_accounts.qboAccountId` + `qboSyncStatus` (`synced/pending_create/pending_map/geeves_only/deprecated`), `coa_mappings` (one_to_one/many_to_one/custom — aligns with the mapping framework's exact/rollup/split/create)
+- Per-vertical QBO config: `vertical_financial_configs.qboRealmId`, sync direction, export approval required, batch size 50
+- Legacy expense-layer fields: `expenses.qboExportStatus/qboExportDate/qboTransactionId` (retained; the expense layer keeps its own export state for traceability, but the G.L. drives the actual sync)
+
+**Open infra question:** whether the Phase 1 G.L. migration + seeds were applied to the **Cloud SQL** beta DB during the TiDB→Cloud SQL cutover. Verified before anything else (cleanup item C-1).
+
+**Missing docs:** `VERTICAL_GL_CATALOGS.md`, `QBO_MAPPING_FRAMEWORK.md`, `COA_CHANGE_LOG.md` — not in repo; recovery tracked in the cleanup program.
+
+---
+
+## 2. Prerequisite — The Ledger Cleanup Program (Phases 2–3 of the parent roadmap)
+
+These are the "existing financials reflect cleanly in beta" workstreams. Each is independently verifiable.
+
+| # | Item | Acceptance test |
 |---|---|---|
-| `expenses.qboExportStatus` | enum: pending / exported / failed / not_applicable | Per-expense export lifecycle |
-| `expenses.qboExportDate` / `qboTransactionId` | timestamp / varchar(255) | Write-back from QBO |
-| `expenses.status` | pending / approved / rejected | **Only `approved` expenses are export-eligible** |
-| `chart_of_accounts.qboAccountId` / `qboSyncStatus` | varchar(50) / enum | COA↔QBO account link state |
-| `coa_mappings` | table | one_to_one / many_to_one / custom account mapping |
-| `vertical_financial_configs` | table | Per-vertical currency/tolerance + QBO connection slot |
-| 112 seeded COA accounts, split support (`splitGroupId`), exchange rates | DB | The export payload |
+| C-1 | **G.L. migration + seed on beta DB** — create the 5 G.L. tables on Cloud SQL if absent; run `seed_gl_accounts.sql` | `SHOW TABLES` shows all 5; `chart_of_accounts` holds ~120 G.L. accounts across the 9 verticals |
+| C-2 | **Posting engine** — `server/services/postingEngine.ts`: source rows (property_bookings, ltr_payments, expenses, financial_transactions, airbnb_payout_records) → balanced journal entries (Σdebit = Σcredit enforced at write; `sourceTable`+`sourceId` lineage; idempotent re-runs) | vitest: every source type posts balanced entries; re-run produces zero duplicates |
+| C-3 | **Backfill + trial balance** — backfill from the recon staging DB (`geeves_life_v2.db`, source of truth) into the G.L.; trial balance report per vertical | Per-vertical totals foot to V17.26 anchors; grand total = **$775,524.01** |
+| C-4 | **DTO footing rebuild** — Due-to-Owner pairs across verticals foot and eliminate on consolidation | DTO receivable sum = DTO payable sum; consolidated view nets to zero |
+| C-5 | **Review-queue burn-down** — 2,037 unattributed recon rows triaged (auto-match where confidence ≥ 0.85, manual queue UI for the rest) | Queue = 0 or every remaining row has an owner decision |
+| C-6 | **Docs recovery** — commit `VERTICAL_GL_CATALOGS.md`, `QBO_MAPPING_FRAMEWORK.md`, `COA_CHANGE_LOG.md` from the recon workspace | All three in `docs/` on main |
 
-**Conclusion:** greenfield build on a prepared foundation. Nothing to migrate, nothing to unbreak.
+C-2's posting engine is also what makes financials *stay* clean: every new booking/payout/expense posts to the G.L. at creation time from Phase 2 onward.
 
 ---
 
-## 2. Scope
+## 3. QBO Scope (post-cleanup)
 
-**In scope (this project):**
-- QBO OAuth 2.0 connect/disconnect (Intuit Developer app)
-- COA mapping: pull QBO accounts, populate `coa_mappings`
-- Expense export worker: approved expenses → QBO **Purchase** transactions
+**In scope:**
+- QBO OAuth 2.0 connect/disconnect (Intuit Developer app), per-vertical realm bindings via `vertical_financial_configs.qboRealmId`
+- COA mapping execution: pull QBO accounts, populate `coa_mappings` per the framework (exact/rollup/split/create; `pending_create` accounts pushed on next sync)
+- Export worker: **posted journal entries** → QBO transactions, approval-gated (per `vertical_financial_configs` export approval), batched (50)
 - Status write-back + failure classification + retry
 - Settings → Integrations UI (connect card + export queue status)
 
+**Schema delta required (Phase 4 only):** add export lifecycle columns to `journal_entries` — `qboExportStatus` (pending/exported/failed/not_applicable), `qboExportDate`, `qboTransactionId`, `qboRealmId`. (An entry belongs to exactly one vertical → exactly one realm, so per-entry columns suffice; no link table needed.)
+
 **Explicitly deferred:**
-- Revenue sync (property bookings → QBO SalesReceipt/Invoice) — Phase 4 candidate, needs its own design pass (tax remittance semantics differ per platform/jurisdiction; see todo §2054–2127)
+- Revenue-side nuance beyond what posting engine produces (tax remittance per platform/jurisdiction is handled *inside* journal lines, so QBO inherits it for free)
 - Square sync — separate integration, same orphan-alert status, no code exists
-- Two-way sync (QBO → Geeves) — one-way push only for v1
+- Two-way sync (QBO → Geeves) — one-way push only (`geeves_to_qbo` per config)
 - Bill-pay / payroll / bank feeds — out of scope entirely
 
 ---
 
-## 3. Architecture
+## 4. Architecture
 
-### 3.1 OAuth Connect Flow — `server/auth/qboOAuth.ts`
+### 4.1 OAuth Connect Flow — `server/auth/qboOAuth.ts`
 
-Modeled on `googleAccountConnect.ts` (established patterns are mandatory):
+Modeled on `googleAccountConnect.ts`:
 
 - Intuit OAuth 2.0, scope: `com.intuit.quickbooks.accounting` (the only accounting scope Intuit offers — least-privilege rule §13 satisfied by documentation, since no narrower variant exists)
 - Mandatory nonce + session binding on `state` (P-14 / H-9 origin allowlist applies to the redirect)
@@ -64,119 +85,113 @@ Modeled on `googleAccountConnect.ts` (established patterns are mandatory):
 | Column | Type | Notes |
 |---|---|---|
 | id | varchar(36) PK | nanoid |
-| householdId | varchar(36) FK | one connection per household per environment |
+| householdId | varchar(36) FK | |
+| verticalId | varchar(36) FK | **per-vertical realm binding** — one connection per (vertical, environment) |
 | realmId | varchar(64) | Intuit company ID |
 | environment | enum(sandbox, production) | drives base URL |
-| accessToken | text | encrypted at rest (same scheme as oauth_tokens) |
-| refreshToken | text | encrypted; **Intuit refresh tokens live 100 days, rolling** |
-| refreshTokenExpiresAt | bigint | UTC ms — alert at 7 days remaining |
+| accessToken / refreshToken | text | encrypted at rest (same scheme as oauth_tokens) |
+| refreshTokenExpiresAt | bigint | UTC ms — Intuit refresh = 100 days, **rolling**; alert at 7 days remaining |
 | accessTokenExpiresAt | bigint | UTC ms (1h lifetime) |
 | connectedByMemberId | varchar(36) FK | audit |
 | status | enum(active, expired, revoked, error) | drives dashboard health |
 | createdAt / updatedAt | timestamp | |
 
-- **Rolling refresh rule:** every token refresh returns a NEW refresh token. Persist it atomically in the same transaction as the access token. Losing a refresh token = full reconnect (P-16-adjacent: silent staleness is the enemy).
+- **Rolling refresh rule:** every refresh returns a NEW refresh token. Persist atomically in the same transaction as the access token. Losing it = full reconnect.
 
-### 3.2 QBO API Client — `server/services/qboClient.ts`
+### 4.2 QBO API Client — `server/services/qboClient.ts`
 
 - Base URLs: `https://sandbox-quickbooks.api.intuit.com` / `https://quickbooks.api.intuit.com`, path `/v3/company/{realmId}/...`
 - `minorversion` pinned (current: 75) in one constant
-- Auto-refresh on 401 with **single-flight refresh** (concurrent sync must trigger exactly one refresh call — token refresh race is a known anti-pattern, see calendarWebhook.ts history)
-- Typed wrappers only for what we use: `query`, `createPurchase`, `readAccount(list)`, `companyInfo`
-- All calls `logAudit()` — category `qbo`, outcomes success/failure/denied
+- Single-flight refresh on 401 (token-race pattern from calendarWebhook history)
+- Typed wrappers only for what we use: `query`, `createPurchase`, `createJournalEntry`, `readAccount(list)`, `companyInfo`
+- All calls `logAudit()` — category `qbo`
 
-### 3.3 COA Mapping — `server/routers/qbo.ts` (procedures)
+**Posting entity choice:** G.L. entries map to QBO **JournalEntry** entities by default (true double-entry passthrough — preserves our debit/credit lines exactly). `Purchase` is used only where QBO-side vendor reporting requires it (decision per mapping-framework review; default: JournalEntry).
 
-- `qbo.getConnectionStatus` — connection health for Settings UI
-- `qbo.disconnect` — revoke + mark revoked (GDPR Art. 17 path must also revoke, per playbook precedent)
-- `qbo.listQboAccounts` — pull QBO Chart of Accounts (for mapping UI)
-- `qbo.upsertCoaMapping` — write `coa_mappings` rows (admin/EA only, reuse `requireExpenseAccess()` guard)
-- `qbo.getExportQueue` — counts by qboExportStatus for the UI
+### 4.3 COA Mapping — `server/routers/qbo.ts`
 
-### 3.4 Export Worker — `server/scheduledHandlers/qboSync.ts`
+- `qbo.getConnectionStatus` — per-vertical connection health for Settings UI
+- `qbo.disconnect` — revoke + mark revoked (GDPR path must also revoke)
+- `qbo.listQboAccounts` — pull QBO Chart of Accounts for mapping UI
+- `qbo.upsertCoaMapping` — write `coa_mappings` rows (exact/rollup/split; `requireExpenseAccess()` guard)
+- `qbo.getExportQueue` — counts by export status per vertical
 
-Modeled directly on `shadowBlockSyncRetry.ts` (the pattern proven in production today):
+### 4.4 Export Worker — `server/scheduledHandlers/qboSync.ts`
 
-- Registered as `POST /api/scheduled/qbo-sync` in `server/_core/index.ts`
-- Auth: `x-cron-secret` header === `ENV.systemCronSecret`, localhost bypass — identical contract
-- Cloud Scheduler job: every 15 min (expense volume is low; no need for 2-min cadence)
-- Batch: 50 expenses/run, `WHERE status='approved' AND qboExportStatus='pending'`
-- Per expense: resolve `coa_mappings` → QBO AccountRef; resolve `bank_accounts` → QBO payment AccountRef; build Purchase entity (PaymentType: Cash/CreditCard by account type); POST
-- **Write-back (P-16 cardinal rule):** only a QBO 2xx with a returned entity `Id` sets `qboExportStatus='exported'` + `qboTransactionId`. Any other outcome = `failed` + error text. No silent success, ever.
-- Error classification (mirrors sync-retry handler):
-  - 401/token-expired → mark connection `error`, notify owner, do NOT burn expense retry
-  - 400 validation (bad mapping) → `failed`, surface in UI with the mapping that needs fixing
-  - 429/5xx → leave `pending`, exponential backoff
-  - Unmapped COA → skip, count as `unmapped` in response, do not mark failed
-- Response shape: `{ processed, exported, failed, skippedUnmapped, elapsed }`
+Modeled on `shadowBlockSyncRetry.ts`:
 
-### 3.5 UI
+- `POST /api/scheduled/qbo-sync`, `x-cron-secret` auth, localhost bypass — identical contract
+- Cloud Scheduler: every 15 min
+- Batch: 50 **posted, unlocked** journal entries where `qboExportStatus='pending'` **and the vertical's config has export approval granted** (approval is a UI action per batch; worker never exports unapproved batches)
+- Per entry: resolve realm from `vertical_financial_configs`; map each journal line's `glAccountId` → QBO AccountRef via `coa_mappings` (rollup collapses N lines → 1; split fans 1 → N by class/property); build QBO JournalEntry; POST
+- **Write-back (P-16 cardinal rule):** only a QBO 2xx with returned entity `Id` sets `exported` + `qboTransactionId`. Anything else = `failed` + error text.
+- Error classification: 401 → connection `error` + owner notify (no entry retry burn); 400 validation → `failed`, surfaced for mapping fix; 429/5xx → stays `pending`, backoff; unmapped account → `skippedUnmapped` count, entry untouched
+- Response: `{ processed, exported, failed, skippedUnmapped, perVertical: {...}, elapsed }`
 
-- Settings → Integrations: "QuickBooks Online" card — Connect/Disconnect, environment badge (Sandbox/Production), realm company name, token health (mirrors the Google account health banner patterns)
-- Expenses page: export status chip per expense (Pending/Exported/Failed), filter, "Retry failed" bulk action (admin/EA)
-- No new nav item; both surfaces extend existing pages
+### 4.5 UI
+
+- Settings → Integrations: "QuickBooks Online" card — per-vertical connect/status, environment badge, realm company name, token health
+- Finance/G.L. view: export status chip per journal entry; **export approval queue** (batch review → approve → worker picks up) — this is the approval gate from the parent design
+- `financial` data category: all qbo router responses pass `stripByPolicy()` for restricted members (Cary model)
 
 ---
 
-## 4. Environment & Secrets
-
-New env vars (via Secret Manager, same pattern as existing):
+## 5. Environment & Secrets
 
 | Env var | Secret name (GCP) | Notes |
 |---|---|---|
 | `QBO_CLIENT_ID` | `geeves-qbo-client-id` | From Intuit Developer app |
 | `QBO_CLIENT_SECRET` | `geeves-qbo-client-secret` | Never logged |
-| `QBO_ENVIRONMENT` | plain env | `sandbox` until Phase 5 cutover |
+| `QBO_ENVIRONMENT` | plain env | `sandbox` until cutover |
 | `QBO_REDIRECT_URI` | plain env | `https://beta.geeves.life/api/auth/qbo/callback` |
 
-`env.ts` additions follow existing style. **Beta and live get separate connections** — same secret names, per-service values, matching the current cron-secret pattern.
+Beta and live get separate connections — same secret names, per-service values.
 
 ---
 
-## 5. Governance & Compliance Hooks
+## 6. Governance & Compliance Hooks
 
-- **Audit:** `qbo.connect`, `qbo.disconnect`, `qbo.export.success`, `qbo.export.failure` in `audit_log` (actorType=user|system, metadata includes realmId + counts, never tokens)
-- **Data classification:** QBO connection status and export queue are `financial` category — `stripByPolicy()` applies to any qbo router response visible to restricted members (Cary model)
+- **Audit:** `qbo.connect`, `qbo.disconnect`, `qbo.export.approved`, `qbo.export.success`, `qbo.export.failure` in `audit_log` (metadata: realmId + counts, never tokens)
 - **Access:** all qbo procedures behind `requireExpenseAccess()` (household_admin or ea)
-- **P-16 / P-12:** write-back only on verified 2xx; guard applied to ALL export paths including any future bulk/replay path
-- **ENGINEERING_LESSONS:** new candidate pattern to document after build — "Rolling Refresh Token Loss" if the single-flight + atomic persist design changes
+- **P-16 / P-12:** write-back only on verified 2xx; guard on ALL export paths including bulk/replay
+- **G.L. invariants preserved:** export never mutates journal lines; posted+locked entries are read-only to the sync
 
 ---
 
-## 6. Testing Plan
+## 7. Testing Plan
 
-- vitest: qboClient (refresh single-flight, minorversion pinning, error mapping), qboSync handler (batching, classification, write-back, unmapped skip), qboOAuth (nonce, state binding, origin allowlist)
-- Target: matches current suite health (289+ tests passing, `tsc --noEmit` clean) before merge
-- Real-world (DESIGN_PRINCIPLES §12): sandbox company end-to-end — connect, map 3 accounts, export 5 real expenses, verify in QBO sandbox UI, disconnect, verify revoked status + banner
+- vitest: qboClient (refresh single-flight, error mapping), qboSync (batching, rollup/split mapping, classification, write-back, approval gate), qboOAuth (nonce, state binding, origin allowlist)
+- Suite health bar: 289+ passing, `tsc --noEmit` clean before merge
+- Real-world (§12 testing principles): sandbox end-to-end — connect, map 3 accounts, approve + export 5 entries, verify in QBO sandbox UI, disconnect → revoked status + banner
 
 ---
 
-## 7. Rollout Phases
+## 8. Rollout Phases
 
 | Phase | Deliverable | Gate |
 |---|---|---|
-| 0 | This doc + Intuit Developer app + sandbox company (owner action) | Doc approved |
-| 1 | `qbo_connections` table, OAuth connect/callback, Settings card | Connect/disconnect works on beta, sandbox |
-| 2 | COA pull + mapping UI + `coa_mappings` populated | 112 COA accounts mapped or explicitly skipped |
-| 3 | Export worker + scheduler + status chips + retry | 5-expense sandbox export verified in QBO UI |
-| 4 | (Separate design) Revenue sync from property_bookings | Phase 3 stable 2 weeks |
-| 5 | Production cutover: `QBO_ENVIRONMENT=production`, production Intuit app keys, live company connect | Owner sign-off + tax-prep dry run |
-
----
-
-## 8. Open Decisions (owner)
-
-1. **Intuit app ownership:** app must live under an Intuit account the business controls (not a personal throwaway)
-2. **Multi-vertical posting:** v1 posts all expenses to ONE QBO company using Class/Location per vertical — confirm QBO plan includes Classes (Plus+), else mapping falls back to account-level only
-3. **Historical export:** after Phase 3, one-time backfill export of already-approved historical expenses? (Recommend: yes, batched 50/run, but owner chooses cutoff date)
+| **0** | This doc + FINANCIAL_DESIGN_PLAN.md merged; orphan crons deleted | PR approved |
+| **1** | **Cleanup C-1**: G.L. migration + seeds verified/applied on beta DB | 5 tables + ~120 accounts present |
+| **2** | **Cleanup C-2 + C-6**: posting engine + docs recovery | vitest green; re-run idempotent |
+| **3** | **Cleanup C-3 + C-4 + C-5**: backfill, DTO rebuild, review-queue burn-down | **Trial balance foots to $775,524.01; DTO nets zero; queue = 0** |
+| **4** | Intuit app (owner action) + OAuth connect + `qbo_connections` + COA mapping UI | Connect/disconnect on beta sandbox; mappings populated |
+| **5** | Export worker + scheduler + approval queue UI | 5-entry sandbox export verified in QBO UI |
+| **6** | Production cutover: production Intuit keys, live realms connect | Owner sign-off + tax-prep dry run |
 
 ---
 
 ## 9. Housekeeping Tied to This Project
 
-- `gcloud scheduler jobs list --project=geeves-495802` — find and delete any orphan job pointing at `/api/scheduled/qbo-sync` or Square endpoints (source of the "Sync Failed" alerts; the endpoints never existed)
+- `gcloud scheduler jobs list --project=geeves-495802` — find/delete orphan jobs pointing at QBO or Square endpoints
 - todo.md 2543–2544: update once orphans confirmed dead
+
+## 10. Open Decisions (owner)
+
+1. **Intuit app ownership:** app under a business-controlled Intuit account
+2. **Realms:** one QBO company with Classes per vertical vs. multiple companies (design supports both via per-vertical `qbo_connections` rows) — confirm QBO plan tier
+3. **Historical export:** after Phase 5, export the backfilled historical G.L. to QBO? (Recommend: yes, batched, owner picks cutoff)
+4. **JournalEntry vs Purchase** entity mapping (default JournalEntry; see §4.2)
 
 ---
 
-*Built on: Section 16 schema stack, Jul 5 Property Financial Overhaul, Section 18 QBO-compatibility design (6-phase migration + dual-write), shadowBlockSyncRetry production pattern (Aug 6, 2026 — engine live on geeves-beta-00039-sgl).*
+*v2 corrects the export source to the Unified G.L. per FINANCIAL_DESIGN_PLAN.md and sequences QBO behind the Ledger Cleanup Program. Built on: PR #5 G.L. schema, Section 16 schema stack, Jul 5 Property Financial Overhaul, V17.26 recon baseline, shadowBlockSyncRetry production pattern (Aug 6, 2026).*
