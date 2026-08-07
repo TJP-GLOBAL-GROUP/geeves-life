@@ -32,6 +32,15 @@
  * Booking Requests:
  *   member, caregiver, child, elder → can submit booking requests for FREE slots only
  *   ea, household_admin             → can approve/decline booking requests
+ *
+ * Financial Capabilities (v2.2 §4, D9):
+ *   The two legacy global flags (finance.view / finance.manage) are DEPRECATED
+ *   aliases during transition. Authorisation for every financial procedure runs
+ *   through server/finance/access.ts → canAccessFinancials(), which resolves the
+ *   five vertical-scoped + two global capabilities below per vertical. Only
+ *   household_admin holds the new capabilities as role baseline; all other
+ *   holders gain them via vertical_owners.isFinancialOwner, vertical_member_access
+ *   level, or an explicit member_permission_overrides row — never via ROLE_PERMISSIONS.
  */
 
 import { TRPCError } from "@trpc/server";
@@ -53,7 +62,13 @@ export type Permission =
   | "booking.manage"           // can approve/decline booking requests
   | "shadow.manage" | "vertical.manage" | "property.manage" | "device.control"
   | "notes.create" | "notes.view_all" | "shopping.manage"
+  // DEPRECATED global finance flags — transition aliases only (see header note)
   | "finance.view" | "finance.manage"
+  // v2.2 §4.1 vertical-scoped financial capabilities (resolved per vertical)
+  | "finance.view_aggregate" | "finance.view_detail" | "finance.post"
+  | "finance.resolve_workbench" | "finance.export_qbo"
+  // v2.2 §4.1 global financial capabilities
+  | "finance.assign_vertical" | "finance.view_sensitive"
   | "member.edit_self" | "member.view_all" | "subscription.manage";
 
 export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
@@ -64,7 +79,13 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     "booking.manage",
     "shadow.manage", "vertical.manage", "property.manage", "device.control",
     "notes.create", "notes.view_all", "shopping.manage",
-    "finance.view", "finance.manage", "member.edit_self", "member.view_all", "subscription.manage",
+    "finance.view", "finance.manage",
+    // v2.2: household_admin holds every financial capability on every vertical
+    // (Global ledger, D7). All other roles gain these per-vertical via the resolver.
+    "finance.view_aggregate", "finance.view_detail", "finance.post",
+    "finance.resolve_workbench", "finance.export_qbo",
+    "finance.assign_vertical", "finance.view_sensitive",
+    "member.edit_self", "member.view_all", "subscription.manage",
   ],
   ea: [
     // EA sees all verticals at their visibility level (busy_only floor on admin_only verticals)
@@ -74,6 +95,9 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     "shadow.manage", "notes.create", "notes.view_all", "shopping.manage",
     // EA can invite new household members (optional authorised delegation feature)
     "household.invite",
+    // v2.2: EA financial capabilities are granted per-vertical by the resolver
+    // (full on assigned verticals ⇒ aggregate/detail/post/resolve) — deliberately
+    // NOT a role baseline here, so unassigned verticals stay denied.
     "member.edit_self", "member.view_all",
   ],
   member: [
@@ -81,6 +105,7 @@ export const ROLE_PERMISSIONS: Record<string, Permission[]> = {
     "calendar.view_vertical", "calendar.view_own",
     // Members cannot create/edit events — they submit booking requests instead
     "booking.request",
+    // finance.view retained as deprecated alias ⇒ finance.view_aggregate via resolver
     "notes.create", "shopping.manage", "finance.view", "member.edit_self", "member.view_all",
   ],
   caregiver: [
@@ -184,12 +209,16 @@ export const ALL_PERMISSIONS: Permission[] = [
   "shadow.manage", "vertical.manage", "property.manage", "device.control",
   "notes.create", "notes.view_all", "shopping.manage",
   "finance.view", "finance.manage",
+  "finance.view_aggregate", "finance.view_detail", "finance.post",
+  "finance.resolve_workbench", "finance.export_qbo",
+  "finance.assign_vertical", "finance.view_sensitive",
   "member.edit_self", "member.view_all", "subscription.manage",
 ];
 
 /**
  * Permission groups for the unified Member Permissions page UI.
  * Each group has a label, description, and list of permissions to display.
+ * v2.2 §4.1: financial permissions have their own `finance` group — out of `content`.
  */
 export const PERMISSION_GROUPS: Array<{
   group: string;
@@ -232,13 +261,28 @@ export const PERMISSION_GROUPS: Array<{
   {
     group: "content",
     label: "Content & Shopping",
-    description: "Access to notes, shopping, and financial data",
+    description: "Access to notes and shopping",
     permissions: [
       { key: "notes.create",    label: "Create Notes",       description: "Create and edit notes" },
       { key: "notes.view_all",  label: "View All Notes",     description: "See notes created by all household members" },
       { key: "shopping.manage", label: "Manage Shopping",    description: "Create and edit shopping lists and orders" },
-      { key: "finance.view",    label: "View Financials",    description: "See financial data (revenue, expenses, budgets)" },
-      { key: "finance.manage",  label: "Manage Financials",  description: "Edit financial records and budgets" },
+    ],
+  },
+  {
+    group: "finance",
+    label: "Finance",
+    description: "Vertical-scoped financial access (resolved per vertical by canAccessFinancials)",
+    permissions: [
+      { key: "finance.view_aggregate",    label: "View Financial Totals",     description: "Vertical totals, trends and headlines — no line detail or memos" },
+      { key: "finance.view_detail",       label: "View Financial Detail",     description: "Individual journal entries and lines within granted verticals" },
+      { key: "finance.post",              label: "Post Entries",              description: "Create and post journal entries in granted verticals" },
+      { key: "finance.resolve_workbench", label: "Resolve Workbench Items",   description: "Resolve review-queue items in granted verticals" },
+      { key: "finance.export_qbo",        label: "Export to QuickBooks",      description: "Approve and push QBO batches (household admin only by default)", globalOnly: true },
+      { key: "finance.assign_vertical",   label: "Assign Verticals (Unassigned Queue)", description: "Resolve items whose vertical is undetermined (household admin only)", globalOnly: true },
+      { key: "finance.view_sensitive",    label: "View Sensitive Finance",    description: "Salary, emoluments and child-medical attributes — audited on every use", globalOnly: true },
+      // Deprecated global aliases — retained during transition, resolve to the scoped capabilities
+      { key: "finance.view",              label: "View Financials (deprecated)",  description: "Deprecated alias for View Financial Totals" },
+      { key: "finance.manage",            label: "Manage Financials (deprecated)", description: "Deprecated alias for Post Entries" },
     ],
   },
   {
