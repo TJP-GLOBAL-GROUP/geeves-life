@@ -28,6 +28,7 @@ import { exchangeRateFetchHandler } from "../scheduledHandlers/exchangeRateFetch
 import { guardianMonitorHandler } from "../scheduledHandlers/guardianMonitor";
 import { guardianDailyDigestHandler } from "../scheduledHandlers/guardianDailyDigest";
 import { guardianFinancialSweepHandler } from "../scheduledHandlers/guardianFinancialSweep";
+import { warnIfCronSecretMissing } from "../scheduledHandlers/scheduledAuth";
 import helmet from "helmet";
 import { rateLimit } from "express-rate-limit";
 import { editsApiRouter } from "../editsApi";
@@ -54,6 +55,10 @@ async function findAvailablePort(startPort: number = 3000): Promise<number> {
 async function startServer() {
   const app = express();
   const server = createServer(app);
+
+  // Fail loudly at boot if the scheduled-endpoint secret is missing — otherwise
+  // every /api/scheduled/* call from Cloud Scheduler silently 401s forever.
+  warnIfCronSecretMissing();
 
   // Trust the first proxy hop (Cloud Run / Manus load balancer) so express-rate-limit
   // can correctly read the real client IP from X-Forwarded-For without throwing
