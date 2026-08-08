@@ -58,7 +58,7 @@ export type InsertShoppingList = typeof shoppingLists.$inferInsert;
 export const shoppingListItems = mysqlTable("shopping_list_items", {
   id: int("id").autoincrement().primaryKey(),
   listId: int("listId").notNull(),
-  name: varchar("name", { length: 255 }).notNull(),
+  name: varchar("name", { length: 500 }).notNull(),
   quantity: int("quantity").default(1),
   unit: varchar("unit", { length: 50 }),
   category: varchar("category", { length: 100 }),
@@ -124,19 +124,17 @@ export type InsertTransaction = typeof transactions.$inferInsert;
 export const orders = mysqlTable("orders", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
-  platform: varchar("platform", { length: 100 }).notNull(),
+  platform: varchar("platform", { length: 100 }),
   orderNumber: varchar("orderNumber", { length: 255 }),
   vendor: varchar("vendor", { length: 255 }),
   totalAmount: decimal("totalAmount", { precision: 12, scale: 2 }),
   currency: varchar("currency", { length: 3 }).default("USD"),
-  status: mysqlEnum("status", ["pending", "shipped", "delivered", "cancelled", "returned"]).default("pending").notNull(),
+  status: mysqlEnum("status", ["pending", "shipped", "delivered", "cancelled"]).default("pending").notNull(),
   trackingNumber: varchar("trackingNumber", { length: 255 }),
   items: json("items"),
   importSource: mysqlEnum("importSource", ["email", "manual", "whatsapp"]).default("manual").notNull(),
   orderDate: timestamp("orderDate").notNull(),
-  deliveryDate: timestamp("deliveryDate"),
-  createdAt: timestamp("createdAt").defaultNow().notNull(),
-  updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
+  deliveryDate: timestamp("deliveryDate").defaultNow().notNull(),
 });
 export type Order = typeof orders.$inferSelect;
 export type InsertOrder = typeof orders.$inferInsert;
@@ -157,7 +155,7 @@ export const whatsappImports = mysqlTable("whatsapp_imports", {
   contactName: varchar("contactName", { length: 255 }),
   rawMessage: text("rawMessage").notNull(),
   parsedItems: json("parsedItems"),
-  shoppingListId: int("shoppingListId"),
+  shoppingListId: varchar("shoppingListId"),
   importedAt: timestamp("importedAt").defaultNow().notNull(),
 });
 export type WhatsappImport = typeof whatsappImports.$inferSelect;
@@ -175,8 +173,8 @@ export const shoppingSessions = mysqlTable("shopping_sessions", {
   deliveryInfo: json("deliveryInfo"),
   totalItems: int("totalItems").default(0),
   itemsFound: int("itemsFound").default(0),
-  itemsSubstituted: int("itemsSubstituted").default(0),
   itemsUnavailable: int("itemsUnavailable").default(0),
+  itemsSubstituted: int("itemsSubstituted").default(0),
   itemsCrossTransferred: int("itemsCrossTransferred").default(0),
   notifications: json("notifications"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -187,23 +185,25 @@ export type InsertShoppingSession = typeof shoppingSessions.$inferInsert;
 
 export const shoppingSessionItems = mysqlTable("shopping_session_items", {
   id: int("id").autoincrement().primaryKey(),
-  sessionId: int("sessionId").notNull(),
+  sessionId: varchar("sessionId", { length: 21 }).notNull(),
   listItemId: int("listItemId"),
   name: varchar("name", { length: 500 }).notNull(),
   quantity: int("quantity").default(1),
   unit: varchar("unit", { length: 50 }),
+  category: varchar("category", { length: 100 }),
+  notes: text("notes"),
   assignedPlatform: varchar("assignedPlatform", { length: 100 }).notNull(),
-  originalPlatform: varchar("originalPlatform", { length: 100 }),
-  status: mysqlEnum("status", ["queued", "searching", "found", "added_to_cart", "substituted", "unavailable", "transferred", "rejected"]).default("queued").notNull(),
+  sourcePlatform: varchar("sourcePlatform", { length: 100 }).notNull(),
+  status: mysqlEnum("status", ["queued", "searching", "found", "added_to_cart", "unavailable", "substituted", "unavailable", "rejected"]).default("queued").notNull(),
   matchedProductName: varchar("matchedProductName", { length: 500 }),
   matchedProductUrl: text("matchedProductUrl"),
   matchedPrice: decimal("matchedPrice", { precision: 10, scale: 2 }),
   matchConfidence: int("matchConfidence"),
   substitutionReason: text("substitutionReason"),
   originalProductName: varchar("originalProductName", { length: 500 }),
-  transferReason: text("transferReason"),
+  transferReason: varchar("transferReason", { length: 255 }),
   estimatedDelivery: varchar("estimatedDelivery", { length: 255 }),
-  fulfillmentMethod: varchar("fulfillmentMethod", { length: 100 }),
+  fulfillmentMethod: varchar("fulfillmentMethod", { length: 255 }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -216,7 +216,7 @@ export const platformCredentials = mysqlTable("platform_credentials", {
   platform: varchar("platform", { length: 100 }).notNull(),
   credentialData: json("credentialData"),
   isActive: boolean("isActive").default(true),
-  lastUsed: timestamp("lastUsed"),
+  lastUsedAt: timestamp("lastUsedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -226,7 +226,7 @@ export type InsertPlatformCredential = typeof platformCredentials.$inferInsert;
 export const chatMessages = mysqlTable("chat_messages", {
   id: int("id").autoincrement().primaryKey(),
   userId: int("userId").notNull(),
-  role: mysqlEnum("role", ["user", "assistant", "system"]).notNull(),
+  role: mysqlEnum("role", ["user", "assistant", "system"]).default("user").notNull(),
   content: text("content").notNull(),
   metadata: json("metadata"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -239,16 +239,16 @@ export const productMappings = mysqlTable("product_mappings", {
   userId: int("userId").notNull(),
   itemName: varchar("itemName", { length: 500 }).notNull(),
   normalizedName: varchar("normalizedName", { length: 500 }).notNull(),
-  platform: varchar("platform", { length: 100 }).notNull(),
+  platform: varchar("platform", { length: 100 }),
   productId: varchar("productId", { length: 255 }).notNull(),
-  productName: varchar("productName", { length: 500 }).notNull(),
+  productName: varchar("productName", { length: 255 }),
   productUrl: text("productUrl"),
   lastPrice: decimal("lastPrice", { precision: 10, scale: 2 }),
   useCount: int("useCount").default(1),
   confidence: int("confidence").default(80),
   isVerified: boolean("isVerified").default(false),
-  lastAvailable: timestamp("lastAvailable"),
-  lastUsed: timestamp("lastUsed"),
+  lastVerifiedAt: timestamp("lastVerifiedAt"),
+  lastUsedAt: timestamp("lastUsedAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -268,6 +268,8 @@ export const households = mysqlTable("households", {
   groupName: varchar("groupName", { length: 100 }).default("Household"),
   settings: json("settings"),
   eaCanManageAccess: boolean("eaCanManageAccess").default(true).notNull(),
+  /** v2.2 §2.5 (HIGH-4): reporting currency for the consolidated ledger. Global = USD. */
+  reportingCurrency: varchar("reportingCurrency", { length: 3 }).default("USD").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -321,9 +323,20 @@ export const verticals = mysqlTable("verticals", {
   ownerMemberId: varchar("ownerMemberId", { length: 36 }),
   privacyLevel: mysqlEnum("privacyLevel", ["household", "admin_only", "private"]).default("household").notNull(),
   busyLabel: varchar("busyLabel", { length: 50 }).default("Busy"),
+  /** v2.2 §2.3: canonical registry code (MB/MM/BL/PERS/FAM/GL/SO/BLab/TJPGG/REV/MULTI).
+   *  Codes are the human/cross-document vocabulary; UUIDs remain storage keys (invariant 13). */
+  code: varchar("code", { length: 16 }),
+  /** v2.2 §2.3: REV + MULTI are system buckets — never user-selectable, never post. */
+  isSystemBucket: boolean("isSystemBucket").default(false).notNull(),
+  /** v2.2 §2.5 (HIGH-4): per-vertical reporting currency (e.g. BL = JMD, MM = USD). */
+  reportingCurrency: varchar("reportingCurrency", { length: 3 }),
+  /** v2.2 §4.4: cross-vertical redaction placeholder (shadow_blocks busyLabel precedent). */
+  financeRedactedLabel: varchar("financeRedactedLabel", { length: 100 }).default("Internal — Personal"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (t) => ({
+  codeUniq: uniqueIndex("verticals_code_uniq").on(t.code),
+}));
 export type Vertical = typeof verticals.$inferSelect;
 export type InsertVertical = typeof verticals.$inferInsert;
 
@@ -335,13 +348,13 @@ export const calendars = mysqlTable("calendars", {
   provider: mysqlEnum("provider", ["google_workspace", "google_personal", "ical", "manual"]).notNull(),
   externalId: varchar("externalId", { length: 500 }),
   accountEmail: varchar("accountEmail", { length: 320 }),
-  name: varchar("name", { length: 255 }).notNull(),
+  name: varchar("name", { length: 500 }).notNull(),
   color: varchar("color", { length: 20 }),
   syncType: mysqlEnum("syncType", ["push", "poll", "manual"]).default("push").notNull(),
   pollIntervalMinutes: int("pollIntervalMinutes").default(15),
   syncToken: text("syncToken"),
   lastSyncAt: timestamp("lastSyncAt"),
-  syncStatus: mysqlEnum("syncStatus", ["active", "error", "paused"]).default("active"),
+  syncStatus: mysqlEnum("syncStatus", ["active", "error", "paused"]).default("active").notNull(),
   syncError: text("syncError"),
   accessLevel: mysqlEnum("accessLevel", ["read_write", "read_only", "free_busy"]).default("read_write").notNull(),
   isPrimary: boolean("isPrimary").default(false),
@@ -369,12 +382,12 @@ export const events = mysqlTable("events", {
   recurrenceRule: text("recurrenceRule"),
   recurringEventId: varchar("recurringEventId", { length: 36 }),
   status: mysqlEnum("status", ["confirmed", "tentative", "cancelled"]).default("confirmed").notNull(),
-  visibility: mysqlEnum("visibility", ["default", "public", "private", "confidential"]).default("default"),
+  visibility: mysqlEnum("visibility", ["default", "public", "private", "confidential"]).default("public").notNull(),
   attendees: json("attendees"),
   reminders: json("reminders"),
   createdBy: varchar("createdBy", { length: 36 }),
   lastModifiedBy: varchar("lastModifiedBy", { length: 36 }),
-  source: mysqlEnum("source", ["sync", "manual", "voice", "import", "shadow"]).default("sync"),
+  source: mysqlEnum("source", ["sync", "manual", "voice", "import", "shadow"]).default("manual").notNull(),
   isShadowBlock: boolean("isShadowBlock").default(false),
   version: int("version").default(1),
   etag: varchar("etag", { length: 255 }),
@@ -448,11 +461,11 @@ export const devices = mysqlTable("devices", {
   propertyId: varchar("propertyId", { length: 36 }),
   name: varchar("name", { length: 255 }).notNull(),
   type: mysqlEnum("type", ["lock", "camera", "thermostat", "hvac_puck", "light", "sensor", "other"]).notNull(),
-  provider: mysqlEnum("provider", ["seam", "flair", "manual"]).default("seam"),
+  provider: mysqlEnum("provider", ["seam", "flair", "manual"]).default("seam").notNull(),
   externalId: varchar("externalId", { length: 255 }),
   location: varchar("location", { length: 255 }),
   currentState: json("currentState"),
-  status: mysqlEnum("status", ["online", "offline", "error", "setup"]).default("setup"),
+  status: mysqlEnum("status", ["online", "offline", "degraded", "setup"]).notNull().default("setup"),
   lastSeenAt: timestamp("lastSeenAt"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
@@ -485,13 +498,13 @@ export const oauthTokens = mysqlTable("oauth_tokens", {
   accountEmail: varchar("accountEmail", { length: 320 }).notNull(),
   accessToken: text("accessToken").notNull(),
   refreshToken: text("refreshToken"),
-  expiresAt: bigint("expiresAt", { mode: "number" }),
+  expiresAt: bigint("expiresAt", { mode: "number" }).notNull(),
   scopes: text("scopes"),
   purposes: json("purposes").$type<string[]>().default([]),
   displayName: varchar("displayName", { length: 100 }),
-  status: mysqlEnum("status", ["active", "expired", "revoked"]).default("active"),
+  status: mysqlEnum("status", ["active", "expired", "revoked"]).default("active").notNull(),
   lastRefreshedAt: timestamp("lastRefreshedAt"),
-  expiredNotifiedAt: timestamp("expiredNotifiedAt"),
+  expiredNotifiedAt: bigint("expiredNotifiedAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -523,11 +536,11 @@ export const webhookChannels = mysqlTable("webhook_channels", {
   householdId: varchar("householdId", { length: 36 }).notNull(),
   calendarId: varchar("calendarId", { length: 36 }).notNull(),
   resourceId: varchar("resourceId", { length: 255 }),
-  resourceUri: text("resourceUri"),
-  notificationUrl: varchar("notificationUrl", { length: 512 }),
+  resourceUri: text("resourceUri").notNull(),
+  notificationUrl: varchar("notificationUrl", { length: 512 }).notNull(),
   expiresAt: bigint("expiresAt", { mode: "number" }).notNull(),
   token: varchar("token", { length: 255 }),
-  status: mysqlEnum("status", ["active", "expired", "stopped"]).default("active"),
+  status: mysqlEnum("status", ["active", "expired", "revoked"]).default("active").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
 export type WebhookChannel = typeof webhookChannels.$inferSelect;
@@ -542,6 +555,10 @@ export const verticalOwners = mysqlTable("vertical_owners", {
   verticalId: varchar("verticalId", { length: 36 }).notNull(),
   userId: int("userId").notNull(),
   role: mysqlEnum("role", ["owner", "member"]).default("owner").notNull(),
+  /** v2.2 §4.1 (D9): vertical co-admin definition. Operational ownership and
+   *  financial ownership are separable — a property manager can run BL calendars
+   *  with zero P&L visibility. */
+  isFinancialOwner: boolean("isFinancialOwner").default(false).notNull(),
   addedByUserId: int("addedByUserId"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 });
@@ -622,7 +639,7 @@ export const propertyPlatforms = mysqlTable("property_platforms", {
   notificationEmail: varchar("notificationEmail", { length: 320 }),
   emailScrapingEnabled: boolean("emailScrapingEnabled").default(false),
   lastEmailScrapedAt: bigint("lastEmailScrapedAt", { mode: "number" }),
-  emailNotificationEmailPrev: varchar("emailNotificationEmailPrev", { length: 320 }),
+  emailNotificationEmailPrev: varchar("emailNotificationEmailPrev", { length: 64 }),
   lastPolledAt: bigint("lastPolledAt", { mode: "number" }),
   lastError: text("lastError"),
   isActive: boolean("isActive").default(true),
@@ -635,11 +652,11 @@ export type InsertPropertyPlatform = typeof propertyPlatforms.$inferInsert;
 export const propertyPrepRules = mysqlTable("property_prep_rules", {
   id: varchar("id", { length: 36 }).primaryKey(),
   propertyId: varchar("propertyId", { length: 36 }).notNull(),
-  blockDaysBefore: int("blockDaysBefore").default(0).notNull(),
-  blockDaysAfter: int("blockDaysAfter").default(1).notNull(),
+  blockDaysBefore: int("blockDaysBefore").default(0),
+  blockDaysAfter: int("blockDaysAfter").default(1),
   blockNationalHolidays: boolean("blockNationalHolidays").default(false),
   blockSundays: boolean("blockSundays").default(false),
-  customBlockDates: json("customBlockDates"),
+  customRules: json("customRules"),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -651,7 +668,7 @@ export const propertyBookings = mysqlTable("property_bookings", {
   propertyId: varchar("propertyId", { length: 36 }).notNull(),
   platformId: varchar("platformId", { length: 36 }).notNull(),
   icalUid: varchar("icalUid", { length: 500 }),
-  bookingType: mysqlEnum("bookingType", ["booking", "block", "unavailable"]).default("booking").notNull(),
+  bookingType: mysqlEnum("bookingType", ["booking", "block", "unavailable"]).notNull(),
   blockReason: varchar("blockReason", { length: 50 }),
   summary: varchar("summary", { length: 500 }),
   description: text("description"),
@@ -685,7 +702,7 @@ export const propertyBookings = mysqlTable("property_bookings", {
   scrapeConfidence: int("scrapeConfidence"),
   lastEnrichedAt: bigint("lastEnrichedAt", { mode: "number" }),
   bookingStatus: mysqlEnum("bookingStatus", ["confirmed", "cancelled"]).default("confirmed").notNull(),
-  cancelledAt: bigint("cancelledAt", { mode: "number" }),
+  cancelledAt: timestamp("cancelledAt"),
   cancellationSource: varchar("cancellationSource", { length: 64 }),
   hasConflict: boolean("hasConflict").default(false),
   conflictWith: varchar("conflictWith", { length: 36 }),
@@ -744,6 +761,8 @@ export const bookingOverrides = mysqlTable("booking_overrides", {
 export type BookingOverride = typeof bookingOverrides.$inferSelect;
 export type InsertBookingOverride = typeof bookingOverrides.$inferInsert;
 
+// NOTE (v2.2 HIGH-5): audit_log.category is varchar(64), not an enum as the Manus
+// review assumed — 'financial' is therefore a valid category with NO schema change.
 export const auditLog = mysqlTable("audit_log", {
   id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
   actorUserId: int("actorUserId"),
@@ -907,6 +926,10 @@ export const propertyExpenseRecords = mysqlTable("property_expense_records", {
 export type PropertyExpenseRecord = typeof propertyExpenseRecords.$inferSelect;
 export type InsertPropertyExpenseRecord = typeof propertyExpenseRecords.$inferInsert;
 
+// NOTE (v2.2 D8/CRITICAL-2): chart_of_accounts is the CANONICAL production chart.
+// Staging gl_accounts is an import source only. Account-level tax columns below are
+// DEFAULTS; journal_lines.taxFormLine/isTaxRelevant are line-level OVERRIDES.
+// Precedence: line value wins; absent line value falls back to account default.
 export const chartOfAccounts = mysqlTable("chart_of_accounts", {
   id: varchar("id", { length: 32 }).primaryKey(),
   verticalId: varchar("verticalId", { length: 36 }).notNull(),
@@ -929,7 +952,11 @@ export const chartOfAccounts = mysqlTable("chart_of_accounts", {
   isSystemAccount: boolean("isSystemAccount").default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
-});
+}, (t) => ({
+  /** v2.2 A19 (migration 0054): account numbers are unique per household —
+   *  duplicates would make QBO mapping and §2.3 account-prefix derivation ambiguous. */
+  householdAccountNumberUniq: uniqueIndex("coa_household_account_number_uniq").on(t.householdId, t.accountNumber),
+}));
 export type ChartOfAccount = typeof chartOfAccounts.$inferSelect;
 export type InsertChartOfAccount = typeof chartOfAccounts.$inferInsert;
 
@@ -962,7 +989,7 @@ export const airbnbPayoutRecords = mysqlTable("airbnb_payout_records", {
   exchangeRate: decimal("exchangeRate", { precision: 10, scale: 4 }),
   payoutMethod: varchar("payoutMethod", { length: 100 }),
   transactionReference: varchar("transactionReference", { length: 255 }),
-  status: mysqlEnum("status", ["pending", "confirmed", "failed"]).default("pending").notNull(),
+  status: mysqlEnum("status", ["pending", "confirmed", "failed", "partial"]).default("pending").notNull(),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
 });
@@ -1124,7 +1151,7 @@ export const guardianConfig = mysqlTable("guardian_config", {
   isEnabled: boolean("isEnabled").default(true).notNull(),
   monitoringIntervalMinutes: int("monitoringIntervalMinutes").default(5),
   alertChannels: json("alertChannels").$type<string[]>().default(["in_app"]),
-  emailNotifications: boolean("emailNotifications").default(false),
+  emailNotifications: boolean("emailNotifications").default(true),
   smsNotifications: boolean("smsNotifications").default(false),
   pushNotifications: boolean("pushNotifications").default(true),
   customRules: json("customRules"),
@@ -1142,8 +1169,14 @@ export type InsertGuardianConfig = typeof guardianConfig.$inferInsert;
 // ─── Journal Entries — G.L. Header ────────────────────────────────────────────
 // Every financial transaction has exactly one header row.
 // Double-entry detail lives in journal_lines.
+// v2.2 §2.5: posted entries are IMMUTABLE — mutation is forbidden at the
+// application layer (postEntry) and corrections are reversal entries only.
+// Double reversal is impossible by constraint (unique reversedByEntryId).
 export const journalEntries = mysqlTable("journal_entries", {
   id: varchar("id", { length: 21 }).primaryKey(), // nanoid
+  /** v2.2 D7/invariant 11: householdId is the top-level scope key. Nullable until
+   *  the Phase B transfer backfills all rows to TJ Perkins Global (V8lk3KJatvxBTWURf4uo9). */
+  householdId: varchar("householdId", { length: 36 }),
   entryDate: date("entry_date").notNull(),
   fiscalYear: int("fiscal_year").notNull(),
   fiscalMonth: int("fiscal_month").notNull(),
@@ -1164,6 +1197,20 @@ export const journalEntries = mysqlTable("journal_entries", {
   isLocked: boolean("is_locked").default(false),
   postedAt: timestamp("posted_at"),
   postedBy: varchar("postedBy", { length: 36 }),
+  // ── v2.2 §2.5 / CRITICAL-6: status + reversal mechanics ─────────────────────
+  status: mysqlEnum("status", ["draft", "posted", "reversed", "reversal"]).notNull().default("draft"),
+  /** Set on a 'reversal' entry: points at the original entry it reverses. */
+  reversesEntryId: varchar("reversesEntryId", { length: 21 }),
+  /** Set on a 'reversed' entry: points at the reversal entry. Unique → double reversal impossible. */
+  reversedByEntryId: varchar("reversedByEntryId", { length: 21 }),
+  reversalReason: text("reversalReason"),
+  reversedBy: varchar("reversedBy", { length: 36 }),
+  reversedAt: timestamp("reversedAt"),
+  // ── v2.2 §2.5 / HIGH-3: reconciliation state ────────────────────────────────
+  reconStatus: mysqlEnum("reconStatus", ["unreconciled", "matched", "verified", "disputed"]).notNull().default("unreconciled"),
+  reconRef: varchar("reconRef", { length: 128 }),
+  reconciledAt: timestamp("reconciledAt"),
+  reconciledBy: varchar("reconciledBy", { length: 36 }),
   createdAt: timestamp("created_at").defaultNow(),
   updatedAt: timestamp("updated_at").defaultNow().onUpdateNow(),
 }, (t) => ({
@@ -1172,6 +1219,9 @@ export const journalEntries = mysqlTable("journal_entries", {
   sourceIdx: index("je_source_idx").on(t.sourceTable, t.sourceId),
   propertyIdx: index("je_property_idx").on(t.propertyId),
   entryTypeIdx: index("je_entry_type_idx").on(t.verticalId, t.entryType),
+  householdIdx: index("je_household_idx").on(t.householdId),
+  statusIdx: index("je_status_idx").on(t.status),
+  reversedByUniq: uniqueIndex("je_reversed_by_uniq").on(t.reversedByEntryId),
 }));
 export type JournalEntry = typeof journalEntries.$inferSelect;
 export type InsertJournalEntry = typeof journalEntries.$inferInsert;
@@ -1182,26 +1232,47 @@ export type InsertJournalEntry = typeof journalEntries.$inferInsert;
 export const journalLines = mysqlTable("journal_lines", {
   id: varchar("id", { length: 21 }).primaryKey(), // nanoid
   journalEntryId: varchar("journalEntryId", { length: 21 }).notNull(),
+  /** v2.2 D7/invariant 11 (migration 0054): line-level household scope key,
+   *  denormalised from the parent entry so ledger/P&L queries never join through
+   *  the header for the tenant boundary. Nullable pending the 0054 backfill from
+   *  journal_entries (which is itself nullable until the Phase B transfer). */
+  householdId: varchar("householdId", { length: 36 }),
   lineNumber: int("line_number").notNull(),
-  glAccountId: varchar("glAccountId", { length: 21 }).notNull(),
+  /** v2.2 D8: real FK to chart_of_accounts (widened 21→32 to match the target PK;
+   *  FK constraint declared in migration 0053 — this schema file does not inline
+   *  .references() anywhere, so the convention is preserved). Never dangles (inv. 12). */
+  glAccountId: varchar("glAccountId", { length: 32 }).notNull(),
   propertyId: varchar("propertyId", { length: 21 }),
+  /** v2.2 §2.5: line vertical denormalised (appears in every filter; P&L is computed
+   *  from lines, not entry headers — cross-vertical redaction rule §4.4). */
+  verticalId: varchar("verticalId", { length: 36 }),
   description: varchar("description", { length: 255 }),
   debit: decimal("debit", { precision: 15, scale: 2 }).default("0.00"),
   credit: decimal("credit", { precision: 15, scale: 2 }).default("0.00"),
   amount: decimal("amount", { precision: 15, scale: 2 }).notNull(), // signed: + = revenue/asset, - = expense/liability
   currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+  /** v2.2 §2.5 FX rule: transaction-date rate from exchange_rates, stored IMMUTABLE;
+   *  fallback = nearest prior rate (documented in postEntry). */
   exchangeRate: decimal("exchange_rate", { precision: 15, scale: 6 }).default("1.000000"),
   usdEquivalent: decimal("usd_equivalent", { precision: 15, scale: 2 }),
+  /** v2.2 HIGH-4: currency-neutral supplement to usdEquivalent (which hardcodes USD). */
+  reportingAmount: decimal("reporting_amount", { precision: 15, scale: 2 }),
+  reportingCurrency: varchar("reporting_currency", { length: 3 }),
   taxFormLine: varchar("tax_form_line", { length: 50 }),
   isTaxRelevant: boolean("is_tax_relevant").default(false),
   receiptUrl: varchar("receipt_url", { length: 500 }),
+  /** v2.2 HIGH-8: FK to receipt_images (constraint in migration 0053). */
+  receiptId: varchar("receipt_id", { length: 21 }),
   createdAt: timestamp("created_at").defaultNow(),
 }, (t) => ({
   entryIdx: index("jl_entry_idx").on(t.journalEntryId),
+  householdIdx: index("jl_household_idx").on(t.householdId),
   glAccountIdx: index("jl_gl_account_idx").on(t.glAccountId),
   propertyIdx: index("jl_property_idx").on(t.propertyId),
   taxFormIdx: index("jl_tax_form_idx").on(t.taxFormLine),
   verticalAccountYear: index("jl_va_year_idx").on(t.glAccountId, t.createdAt),
+  verticalIdx: index("jl_vertical_idx").on(t.verticalId),
+  receiptIdx: index("jl_receipt_idx").on(t.receiptId),
 }));
 export type JournalLine = typeof journalLines.$inferSelect;
 export type InsertJournalLine = typeof journalLines.$inferInsert;
@@ -1216,10 +1287,10 @@ export const transferPairs = mysqlTable("transfer_pairs", {
   fromAccountId: varchar("fromAccountId", { length: 21 }).notNull(),
   toAccountId: varchar("toAccountId", { length: 21 }).notNull(),
   amount: decimal("amount", { precision: 15, scale: 2 }).notNull(),
-  transferType: mysqlEnum("transferType", [
-    "venmo", "zelle", "atm", "owner_draw", "loan_payment",
-    "credit_card_payment", "internal_transfer",
-  ]).notNull(),
+  /** v2.2 HIGH-2: enum → varchar(50) validated against transfer_rail_types by the
+   *  posting engine — new rails are configuration, not migration (invariant 15).
+   *  NO 'square' value: Square is an explicit non-goal (v2.2 §8). */
+  transferType: varchar("transferType", { length: 50 }).notNull(),
   description: varchar("description", { length: 255 }),
   isReconciled: boolean("is_reconciled").default(false),
   createdAt: timestamp("created_at").defaultNow(),
@@ -1230,12 +1301,29 @@ export const transferPairs = mysqlTable("transfer_pairs", {
 export type TransferPair = typeof transferPairs.$inferSelect;
 export type InsertTransferPair = typeof transferPairs.$inferInsert;
 
+// ─── Transfer Rail Types — Rail Vocabulary Reference (v2.2 HIGH-2) ─────────────
+// Reference table behind transfer_pairs.transferType. Seeded in migration 0053
+// with the existing 7 enum values + stripe, ota_payout, card_funding, wire, ach,
+// multi_clearing. NO 'square' row (v2.2 §8 — explicit non-goal).
+export const transferRailTypes = mysqlTable("transfer_rail_types", {
+  code: varchar("code", { length: 50 }).primaryKey(),
+  label: varchar("label", { length: 255 }).notNull(),
+  description: text("description"),
+  isActive: boolean("isActive").default(true).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+});
+export type TransferRailType = typeof transferRailTypes.$inferSelect;
+export type InsertTransferRailType = typeof transferRailTypes.$inferInsert;
+
 // ─── Tax Documents — Prior Year Returns Storage ─────────────────────────────────
 // Stores prior-year tax returns and preparation guidance in GCS.
 // Personal vertical houses all individual tax documents.
 export const taxDocuments = mysqlTable("tax_documents", {
   id: varchar("id", { length: 21 }).primaryKey(), // nanoid
-  verticalId: varchar("verticalId", { length: 36 }).notNull().default("pers"),
+  /** v2.2 CRITICAL-3 bug fix: was `.default("pers")` — a literal code, not a valid
+   *  UUID. Default dropped in migration 0053; callers must resolve PERS via
+   *  verticals.code before insert. */
+  verticalId: varchar("verticalId", { length: 36 }).notNull(),
   householdId: varchar("householdId", { length: 36 }).notNull(),
   taxYear: int("tax_year").notNull(),
   documentType: mysqlEnum("documentType", [
@@ -1296,6 +1384,174 @@ export const taxLineItems = mysqlTable("tax_line_items", {
 }));
 export type TaxLineItem = typeof taxLineItems.$inferSelect;
 export type InsertTaxLineItem = typeof taxLineItems.$inferInsert;
+
+// ─── Workbench Queue — Unified Review Queue (v2.2 §2.5, A10) ───────────────────
+// Every queue item carries verticalId (known vertical) OR tentativeVerticalId
+// (vertical is the open question). Known-vertical items → finance.resolve_workbench
+// holders; undetermined → Unassigned tab (finance.assign_vertical, admin-only).
+export const workbenchQueue = mysqlTable("workbench_queue", {
+  id: varchar("id", { length: 21 }).primaryKey(), // nanoid
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  verticalId: varchar("verticalId", { length: 36 }),
+  tentativeVerticalId: varchar("tentativeVerticalId", { length: 36 }),
+  queueType: mysqlEnum("queueType", [
+    "uncategorised", "vertical_assignment", "dedupe_conflict",
+    "allocation_conflict", "pair_attribution_overlap", "mis_paired_deposit",
+    "rail_sweep", "unattributed",
+  ]).notNull(),
+  status: mysqlEnum("status", ["open", "in_progress", "resolved", "deferred"]).notNull().default("open"),
+  /** Drives materiality ordering (default sort = |amount| desc, v2.2 §4.4). */
+  amount: decimal("amount", { precision: 15, scale: 2 }),
+  currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+  sourceTable: varchar("sourceTable", { length: 50 }),
+  sourceId: varchar("sourceId", { length: 36 }),
+  payload: json("payload"),
+  assignedToMemberId: varchar("assignedToMemberId", { length: 36 }),
+  resolvedByMemberId: varchar("resolvedByMemberId", { length: 36 }),
+  resolvedAt: timestamp("resolvedAt"),
+  resolutionNote: text("resolutionNote"),
+  /** Set when resolution produces a posting — resolutions pass through postEntry()
+   *  authorisation; the workbench is never a side door into the ledger (§4.4). */
+  journalEntryId: varchar("journalEntryId", { length: 21 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  householdStatusIdx: index("wq_household_status_idx").on(t.householdId, t.status),
+  verticalIdx: index("wq_vertical_idx").on(t.verticalId, t.status),
+  tentativeIdx: index("wq_tentative_idx").on(t.tentativeVerticalId),
+  queueTypeIdx: index("wq_queue_type_idx").on(t.queueType, t.status),
+  materialityIdx: index("wq_materiality_idx").on(t.status, t.amount),
+}));
+export type WorkbenchQueueItem = typeof workbenchQueue.$inferSelect;
+export type InsertWorkbenchQueueItem = typeof workbenchQueue.$inferInsert;
+
+// ─── Receipt Images (v2.2 §2.5, A11/HIGH-8) ─────────────────────────────────────
+// Bytes live in S3/GCS via storagePut — NEVER DB blobs. extractedText is
+// access-gated and PII-scrubbed (receipts can carry card numbers / child-medical).
+export const receiptImages = mysqlTable("receipt_images", {
+  id: varchar("id", { length: 21 }).primaryKey(), // nanoid
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  verticalId: varchar("verticalId", { length: 36 }),
+  storageKey: varchar("storageKey", { length: 500 }).notNull(),
+  originalFileName: varchar("originalFileName", { length: 255 }),
+  mimeType: varchar("mimeType", { length: 50 }),
+  fileSizeBytes: int("file_size_bytes"),
+  source: mysqlEnum("source", ["camera", "file"]).notNull().default("file"),
+  uploadedByMemberId: varchar("uploadedByMemberId", { length: 36 }),
+  uploadedAt: timestamp("uploaded_at").defaultNow().notNull(),
+  extractedText: text("extractedText"),
+  extractionConfidence: int("extraction_confidence"),
+  journalEntryId: varchar("journalEntryId", { length: 21 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  householdIdx: index("ri_household_idx").on(t.householdId),
+  entryIdx: index("ri_entry_idx").on(t.journalEntryId),
+}));
+export type ReceiptImage = typeof receiptImages.$inferSelect;
+export type InsertReceiptImage = typeof receiptImages.$inferInsert;
+
+// ─── Period Locks (v2.2 §2.5, A12) ──────────────────────────────────────────────
+// Unlock requires dual control (unlockedBy + unlockApprovedBy) and a mandatory
+// reason. Unlocking a synced period enqueues QBO re-reconciliation (Phase D).
+export const periodLocks = mysqlTable("period_locks", {
+  id: varchar("id", { length: 21 }).primaryKey(), // nanoid
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  fiscalYear: int("fiscal_year").notNull(),
+  fiscalMonth: int("fiscal_month").notNull(),
+  lockedByMemberId: varchar("lockedByMemberId", { length: 36 }).notNull(),
+  lockedAt: timestamp("locked_at").defaultNow().notNull(),
+  unlockedByMemberId: varchar("unlockedByMemberId", { length: 36 }),
+  unlockApprovedByMemberId: varchar("unlockApprovedByMemberId", { length: 36 }),
+  unlockReason: text("unlockReason"),
+  unlockedAt: timestamp("unlocked_at"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  householdPeriodUniq: uniqueIndex("pl_household_period_uniq").on(t.householdId, t.fiscalYear, t.fiscalMonth),
+}));
+export type PeriodLock = typeof periodLocks.$inferSelect;
+export type InsertPeriodLock = typeof periodLocks.$inferInsert;
+
+// ─── Vertical Code Map — Registry Bridge (v2.2 §2.3/§2.4, A12) ──────────────────
+// Production (MySQL) twin of the staging registry. Bridges staging codes to
+// production vertical UUIDs (vertical_id FK). sync_allowlisted enforces D6 by
+// data: exactly MB + MM are true; Geeves.Life qbo_entity = 'pending' (§2.4).
+export const verticalCodeMap = mysqlTable("vertical_code_map", {
+  stagingCode: varchar("staging_code", { length: 16 }).primaryKey(),
+  verticalId: varchar("vertical_id", { length: 36 }), // FK → verticals.id (migration 0053)
+  docCode: varchar("doc_code", { length: 16 }),
+  displayName: varchar("display_name", { length: 255 }).notNull(),
+  docDisplayName: varchar("doc_display_name", { length: 255 }),
+  accountPrefix: varchar("account_prefix", { length: 16 }).notNull(),
+  isSystemBucket: boolean("is_system_bucket").default(false).notNull(),
+  qboEntity: varchar("qbo_entity", { length: 255 }),
+  syncAllowlisted: boolean("sync_allowlisted").default(false).notNull(),
+  status: mysqlEnum("status", ["active", "retired", "merged"]).notNull().default("active"),
+  mergedInto: varchar("merged_into", { length: 16 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+  updatedAt: timestamp("updated_at").defaultNow().onUpdateNow().notNull(),
+}, (t) => ({
+  verticalIdx: index("vcm_vertical_idx").on(t.verticalId),
+}));
+export type VerticalCodeMapRow = typeof verticalCodeMap.$inferSelect;
+export type InsertVerticalCodeMapRow = typeof verticalCodeMap.$inferInsert;
+
+// ─── Migration Change Log (v2.2 §2.5, A12) ──────────────────────────────────────
+// Production twin of the staging change log. Safeguard 5: summaries carry
+// identifiers/hashes only — never raw descriptions, names, or amounts.
+export const migrationChangeLog = mysqlTable("migration_change_log", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  batchId: varchar("batch_id", { length: 64 }).notNull(),
+  snapshotId: varchar("snapshot_id", { length: 128 }).notNull(),
+  tableName: varchar("table_name", { length: 128 }).notNull(),
+  rowKey: varchar("row_key", { length: 128 }).notNull(),
+  changeType: mysqlEnum("change_type", ["insert", "update", "delete", "move", "retype"]).notNull(),
+  oldValueHash: varchar("old_value_hash", { length: 64 }),
+  newValueHash: varchar("new_value_hash", { length: 64 }),
+  oldValueSummary: varchar("old_value_summary", { length: 255 }),
+  newValueSummary: varchar("new_value_summary", { length: 255 }),
+  appliedBy: varchar("applied_by", { length: 128 }).notNull(),
+  dryRun: boolean("dry_run").default(false).notNull(),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  batchIdx: index("mcl_batch_idx").on(t.batchId),
+  tableIdx: index("mcl_table_idx").on(t.tableName, t.rowKey),
+}));
+export type MigrationChangeLogRow = typeof migrationChangeLog.$inferSelect;
+export type InsertMigrationChangeLogRow = typeof migrationChangeLog.$inferInsert;
+
+// ─── Retired Transaction Map (v2.2 §2.5, A12) ───────────────────────────────────
+// 4-class dedupe lineage: retired txn → surviving txn, per batch.
+export const retiredTxnMap = mysqlTable("retired_txn_map", {
+  id: bigint("id", { mode: "number" }).autoincrement().primaryKey(),
+  retiredTxnId: varchar("retired_txn_id", { length: 64 }).notNull(),
+  survivingTxnId: varchar("surviving_txn_id", { length: 64 }),
+  dedupeClass: varchar("dedupe_class", { length: 32 }).notNull(),
+  batchId: varchar("batch_id", { length: 64 }).notNull(),
+  reason: varchar("reason", { length: 255 }),
+  createdAt: timestamp("created_at").defaultNow().notNull(),
+}, (t) => ({
+  retiredUniq: uniqueIndex("rtm_retired_uniq").on(t.retiredTxnId),
+  survivingIdx: index("rtm_surviving_idx").on(t.survivingTxnId),
+}));
+export type RetiredTxnMapRow = typeof retiredTxnMap.$inferSelect;
+export type InsertRetiredTxnMapRow = typeof retiredTxnMap.$inferInsert;
+
+// ─── Anchor Cache (v2.2 §5, A12) ────────────────────────────────────────────────
+// Self-busting memo for computed anchors: watermark = MAX(edit_log.id) at
+// computation time; any later edit_log row invalidates the entry.
+export const anchorCache = mysqlTable("anchor_cache", {
+  cacheKey: varchar("cache_key", { length: 191 }).primaryKey(),
+  householdId: varchar("householdId", { length: 36 }).notNull(),
+  payload: json("payload").notNull(),
+  watermark: bigint("watermark", { mode: "number" }).notNull(),
+  computedAt: timestamp("computed_at").defaultNow().notNull(),
+}, (t) => ({
+  householdIdx: index("ac_household_idx").on(t.householdId),
+}));
+export type AnchorCacheRow = typeof anchorCache.$inferSelect;
+export type InsertAnchorCacheRow = typeof anchorCache.$inferInsert;
 
 // ─── Vertical Member Access ─────────────────────────────────────────────────────
 export const verticalMemberAccess = mysqlTable("vertical_member_access", {
@@ -1358,7 +1614,7 @@ export const memberResources = mysqlTable("member_resources", {
   memberIdx: index("mr_member_idx").on(t.memberId),
   householdIdx: index("mr_household_idx").on(t.householdId),
   verticalIdx: index("mr_vertical_idx").on(t.verticalId),
-  sortIdx: index("mr_sort_idx").on(t.memberId, t.sortOrder),
+  sortIdx: index("mr_sort_idx").on(t.memberId),
 }));
 export type MemberResource = typeof memberResources.$inferSelect;
 export type InsertMemberResource = typeof memberResources.$inferInsert;
@@ -1390,9 +1646,9 @@ export const propertyEmailTokens = mysqlTable("property_email_tokens", {
   propertyId: varchar("propertyId", { length: 36 }).notNull(),
   emailAddress: varchar("emailAddress", { length: 320 }).notNull(),
   provider: mysqlEnum("provider", ["gmail", "outlook"]).notNull().default("gmail"),
-  accessToken: text("accessToken"),
+  accessToken: text("accessToken").notNull(),
   refreshToken: text("refreshToken"),
-  tokenExpiry: bigint("tokenExpiry", { mode: "number" }),
+  tokenExpiry: bigint("tokenExpiry", { mode: "number" }).notNull(),
   scope: varchar("scope", { length: 500 }),
   lastUsedAt: bigint("lastUsedAt", { mode: "number" }),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
@@ -1505,7 +1761,7 @@ export const bookingScreenshots = mysqlTable("booking_screenshots", {
   s3Key: text("s3Key").notNull(),
   ocrExtractedData: json("ocrExtractedData"),
   ocrConfidence: int("ocrConfidence"),
-  isConfirmed: boolean("isConfirmed").notNull().default(false),
+  isConfirmed: boolean("isConfirmed").default(false).notNull(),
   uploadedByMemberId: varchar("uploadedByMemberId", { length: 36 }),
   uploadedAt: timestamp("uploadedAt").defaultNow().notNull(),
 }, (t) => ({
@@ -1544,7 +1800,7 @@ export const notificationSettings = mysqlTable("notification_settings", {
   label: varchar("label", { length: 255 }).notNull(),
   description: text("description"),
   cooldownHours: int("cooldownHours").notNull().default(6),
-  enabled: boolean("enabled").notNull().default(true),
+  enabled: boolean("enabled").default(true),
   householdId: varchar("householdId", { length: 36 }).notNull(),
   updatedAt: timestamp("updatedAt").defaultNow().onUpdateNow().notNull(),
   lastNotifiedAt: bigint("lastNotifiedAt", { mode: "number" }).default(0),
@@ -1562,8 +1818,7 @@ export const betaSignups = mysqlTable("beta_signups", {
   householdType: varchar("householdType", { length: 100 }),
   householdSize: varchar("householdSize", { length: 50 }),
   primaryUseCase: varchar("primaryUseCase", { length: 255 }),
-  referralSource: varchar("referralSource", { length: 255 }),
-  additionalNotes: text("additionalNotes"),
+  referralSource: varchar("referralSource", { length: 100 }),
   icpScore: int("icpScore"),
   status: mysqlEnum("status", ["pending", "approved", "waitlisted", "rejected"]).notNull().default("pending"),
   adminNotes: text("adminNotes"),
@@ -1580,15 +1835,15 @@ export type InsertBetaSignup = typeof betaSignups.$inferInsert;
 // ─── Contact Messages ───────────────────────────────────────────────────────────
 export const contactMessages = mysqlTable("contact_messages", {
   id: int("id").autoincrement().primaryKey(),
-  name: varchar("name", { length: 255 }).notNull(),
-  email: varchar("email", { length: 320 }).notNull(),
-  subject: varchar("subject", { length: 255 }).notNull(),
-  message: text("message").notNull(),
-  isRead: boolean("isRead").notNull().default(false),
+  name: varchar("name", { length: 255 }),
+  email: varchar("email", { length: 320 }),
+  subject: varchar("subject", { length: 255 }),
+  message: text("message"),
+  isRead: boolean("isRead").default(false),
   createdAt: timestamp("createdAt").defaultNow().notNull(),
 }, (t) => ({
   emailIdx: index("cm_email_idx").on(t.email),
-  isReadIdx: index("cm_is_read_idx").on(t.isRead),
+  isReadIdx: index("cm_isRead_idx").on(t.isRead),
   createdAtIdx: index("cm_created_at_idx").on(t.createdAt),
 }));
 export type ContactMessage = typeof contactMessages.$inferSelect;
