@@ -155,7 +155,13 @@ export const whatsappImports = mysqlTable("whatsapp_imports", {
   contactName: varchar("contactName", { length: 255 }),
   rawMessage: text("rawMessage").notNull(),
   parsedItems: json("parsedItems"),
-  shoppingListId: varchar("shoppingListId"),
+  // HOTFIX (drizzle 0.44.6 boot crash): varchar() requires { length }.
+  // NOTE: migration 0001 + meta snapshot 0052 have this column as `int` in the
+  // live DB — the varchar declaration is pre-existing drift. Length 21 chosen to
+  // preserve the previously-working runtime mapping (string form of the int
+  // shopping_lists.id) with the minimal boot-fix change; reconciling the column
+  // to int("shoppingListId") is a tracked follow-up, not part of this hotfix.
+  shoppingListId: varchar("shoppingListId", { length: 21 }),
   importedAt: timestamp("importedAt").defaultNow().notNull(),
 });
 export type WhatsappImport = typeof whatsappImports.$inferSelect;
