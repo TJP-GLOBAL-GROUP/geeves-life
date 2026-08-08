@@ -2,6 +2,7 @@ import { Link } from "wouter";
 import { GeevesConstellationMark } from "@/components/GeevesLogo";
 
 const LAST_UPDATED = "June 24, 2026";
+const UPDATED = "August 8, 2026";
 
 export default function PrivacyPolicy() {
   return (
@@ -31,7 +32,7 @@ export default function PrivacyPolicy() {
           </div>
           <h1 className="font-display font-bold text-4xl text-foreground mb-3">Privacy Policy</h1>
           <p className="text-muted-foreground text-sm">
-            Operated by <strong className="text-foreground">TJP Global Group</strong> · Last updated {LAST_UPDATED}
+            Operated by <strong className="text-foreground">TJP Global Group</strong> · Last updated {LAST_UPDATED} · Updated {UPDATED}
           </p>
         </div>
 
@@ -61,7 +62,7 @@ export default function PrivacyPolicy() {
 
             <SubSection title="Calendar & Schedule Data">
               <p>
-                If you connect a Google account for calendar synchronisation, we access your Google Calendar data — event titles, times, locations, descriptions, attendees, and recurrence rules. We use this to display your schedule, create events on your behalf, and generate privacy-preserving "busy" blocks that let other household members know you are unavailable without revealing what you are doing. We only request the calendar permissions you explicitly authorise.
+                If you connect a Google account for calendar synchronisation, we access your Google Calendar data — event titles, times, locations, descriptions, attendees, and recurrence rules. We use this to display your schedule, create events on your behalf, and generate privacy-preserving "busy" blocks that let other household members know you are unavailable without revealing what you are doing. We only request the calendar permissions you explicitly authorise, and only for the purposes you select (calendar sync, task management, email-based features, or sending invitations). Unified calendar views include conflict detection across your connected calendars.
               </p>
             </SubSection>
 
@@ -149,7 +150,7 @@ export default function PrivacyPolicy() {
             <p><strong>Access.</strong> You can request a full export of your personal data at any time. We support GDPR Article 20 data portability — contact us at <a href="mailto:privacy@geeves.life" className="underline" style={{ color: "#2AAFA9" }}>privacy@geeves.life</a>.</p>
             <p><strong>Correction.</strong> You can update your profile information at any time in Settings.</p>
             <p><strong>Deletion.</strong> You can request deletion of your account and all associated personal data. We support GDPR Article 17 right to erasure. Contact <a href="mailto:privacy@geeves.life" className="underline" style={{ color: "#2AAFA9" }}>privacy@geeves.life</a> or use the account deletion function in Settings.</p>
-            <p><strong>Disconnection.</strong> You can disconnect any connected Google account or third-party integration at any time from Settings → Integrations.</p>
+            <p><strong>Disconnection.</strong> You can disconnect any connected Google account or third-party integration at any time from Settings → Integrations. Disconnecting an account stops future data access but does not delete historical data already imported. Disconnecting immediately stops syncing, removes push-notification webhooks, and revokes stored OAuth tokens. Previously imported calendar events remain under your control until you delete them or delete your account; after account deletion, they are purged within 30 days.</p>
             <p><strong>Opt-out of product improvement.</strong> If you have opted in to product improvement data sharing, you can withdraw that consent at any time in Settings.</p>
             <p><strong>Children's rights.</strong> Household administrators can review, correct, or delete data associated with child member profiles at any time.</p>
             <p>If you are in the European Economic Area, United Kingdom, or California, you have additional rights under GDPR, UK GDPR, and CCPA respectively. We honour these rights for all users regardless of location.</p>

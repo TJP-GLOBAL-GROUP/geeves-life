@@ -2,7 +2,7 @@
 
 **Geeves.Life** — operated by **TJP Global Group**  
 **Effective date:** June 24, 2026  
-**Last updated:** June 24, 2026
+**Updated:** August 8, 2026
 
 ---
 
@@ -28,7 +28,7 @@ When you sign in with Google or Manus, we receive your name, email address, and 
 
 ### Calendar & Schedule Data
 
-If you connect a Google account for calendar synchronisation, we access your Google Calendar data — event titles, times, locations, descriptions, attendees, and recurrence rules. We use this to display your schedule, create events on your behalf, and generate privacy-preserving "busy" blocks that let other household members know you are unavailable without revealing what you are doing. We only request the calendar permissions you explicitly authorise, and only for the purposes you select (calendar sync, task management, email-based features, or sending invitations).
+If you connect a Google account for calendar synchronisation, we access your Google Calendar data — event titles, times, locations, descriptions, attendees, and recurrence rules. We use this to display your schedule, create events on your behalf, and generate privacy-preserving "busy" blocks that let other household members know you are unavailable without revealing what you are doing. We only request the calendar permissions you explicitly authorise, and only for the purposes you select (calendar sync, task management, email-based features, or sending invitations). Unified calendar views include conflict detection across your connected calendars.
 
 ### Property & Booking Data
 
@@ -116,7 +116,7 @@ You have meaningful control over your data.
 
 **Deletion.** You can request deletion of your account and all associated personal data. We support GDPR Article 17 right to erasure. Household administrators can also remove individual members. Contact **privacy@geeves.life** or use the account deletion function in Settings (when available). Note that some data may be retained for legal compliance or to protect the rights of other household members.
 
-**Disconnection.** You can disconnect any connected Google account or third-party integration at any time from Settings → Integrations. Disconnecting an account stops future data access but does not delete historical data already imported.
+**Disconnection.** You can disconnect any connected Google account or third-party integration at any time from Settings → Integrations. Disconnecting an account stops future data access but does not delete historical data already imported. Disconnecting immediately stops syncing, removes push-notification webhooks, and revokes and purges stored OAuth tokens. Previously imported calendar events remain under your control until you delete them or delete your account; after account deletion, they are purged within 30 days.
 
 **Opt-out of product improvement.** If you have opted in to product improvement data sharing, you can withdraw that consent at any time in Settings.
 
