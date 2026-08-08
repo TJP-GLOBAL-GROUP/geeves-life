@@ -8,7 +8,12 @@
 # Prerequisites:
 #   - gcloud CLI authenticated as a user/SA with Cloud Scheduler Admin role
 #   - Cloud Run service geeves-beta must be deployed and healthy
-#   - SYSTEM_CRON_SECRET must be set in GCP Secret Manager as geeves-cron-secret
+#   - SYSTEM_CRON_SECRET must exist in GCP Secret Manager as
+#     "geeves-live-cron-secret" — this is the SAME secret the deploy workflow
+#     injects into Cloud Run as SYSTEM_CRON_SECRET
+#     (see .github/workflows/deploy-cloudrun.yml, --set-secrets).
+#     The scheduler jobs MUST send the same value the service reads, or every
+#     call returns 401 Unauthorized.
 #
 # Usage (run in GCP Cloud Shell or any machine with gcloud):
 #   chmod +x ops/setup-cloud-scheduler.sh
@@ -23,7 +28,8 @@ set -euo pipefail
 PROJECT="geeves-495802"
 REGION="us-central1"
 SERVICE="geeves-beta"
-SERVICE_ACCOUNT="geeves-beta-runtime@${PROJECT}.iam.gserviceaccount.com"
+# NOTE: must match the secret deployed as SYSTEM_CRON_SECRET on the service.
+CRON_SECRET_NAME="geeves-live-cron-secret"
 
 # Fetch the Cloud Run service URL
 echo "Fetching Cloud Run service URL..."
@@ -37,13 +43,18 @@ SERVICE_URL=$(gcloud run services describe "${SERVICE}" \
 echo "Service URL: ${SERVICE_URL}"
 
 # Fetch the SYSTEM_CRON_SECRET from Secret Manager
-echo "Fetching SYSTEM_CRON_SECRET from Secret Manager..."
+echo "Fetching SYSTEM_CRON_SECRET (${CRON_SECRET_NAME}) from Secret Manager..."
 CRON_SECRET=$(gcloud secrets versions access latest \
-  --secret="geeves-cron-secret" \
+  --secret="${CRON_SECRET_NAME}" \
   --project="${PROJECT}" 2>/dev/null) || {
-  echo "ERROR: Could not fetch geeves-cron-secret from Secret Manager."
+  echo "ERROR: Could not fetch ${CRON_SECRET_NAME} from Secret Manager."
+  echo "Create it first (see ops/bootstrap-gcp-secrets.sh or .github/workflows/create-secrets.yml)."
   exit 1
 }
+if [ -z "${CRON_SECRET}" ]; then
+  echo "ERROR: ${CRON_SECRET_NAME} is empty — jobs would always get 401."
+  exit 1
+fi
 echo "SYSTEM_CRON_SECRET fetched (${#CRON_SECRET} chars)"
 
 # Helper: create or update a Cloud Scheduler job
@@ -59,6 +70,10 @@ create_or_update_job() {
   echo ""
   echo "→ ${JOB_NAME} (${SCHEDULE})"
 
+  # NOTE: --headers is a dict flag; passing it twice REPLACES the first value.
+  # Always pass a single --headers flag with both entries.
+  local HEADERS="Content-Type=application/json,x-cron-secret=${CRON_SECRET}"
+
   # Check if job already exists
   if gcloud scheduler jobs describe "${JOB_NAME}" \
       --project="${PROJECT}" \
@@ -70,13 +85,10 @@ create_or_update_job() {
       --schedule="${SCHEDULE}" \
       --uri="${URL}" \
       --http-method=POST \
-      --headers="Content-Type=application/json" \
-      --headers="x-cron-secret=${CRON_SECRET}" \
+      --headers="${HEADERS}" \
       --message-body='{}' \
       --time-zone="${TIMEZONE}" \
       --description="${DESCRIPTION}" \
-      --oidc-service-account-email="${SERVICE_ACCOUNT}" \
-      --oidc-token-audience="${SERVICE_URL}" \
       --attempt-deadline=540s \
       --quiet
   else
@@ -87,13 +99,10 @@ create_or_update_job() {
       --schedule="${SCHEDULE}" \
       --uri="${URL}" \
       --http-method=POST \
-      --headers="Content-Type=application/json" \
-      --headers="x-cron-secret=${CRON_SECRET}" \
+      --headers="${HEADERS}" \
       --message-body='{}' \
       --time-zone="${TIMEZONE}" \
       --description="${DESCRIPTION}" \
-      --oidc-service-account-email="${SERVICE_ACCOUNT}" \
-      --oidc-token-audience="${SERVICE_URL}" \
       --attempt-deadline=540s \
       --quiet
   fi
