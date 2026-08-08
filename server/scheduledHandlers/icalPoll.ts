@@ -10,19 +10,14 @@ import { getDb } from "../db";
 import { propertyPlatforms, properties } from "../../drizzle/schema";
 import { eq } from "drizzle-orm";
 import { aggregatePlatformICal, generateOutboundICS } from "../services/icalAggregator";
-import { ENV } from "../_core/env";
+import { requireCronAuth } from "./scheduledAuth";
 
 export async function icalPollHandler(req: Request, res: Response) {
   const startedAt = Date.now();
 
   // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
   // Allow localhost for dev/test without auth.
-  const ip = req.ip ?? "";
-  const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-  const secret = req.headers["x-cron-secret"];
-  if (!isInternal && secret !== ENV.systemCronSecret) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  if (!requireCronAuth(req, res, "iCalPoll")) return;
 
   try {
     const db = await getDb();
