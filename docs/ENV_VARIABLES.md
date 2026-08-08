@@ -5,7 +5,7 @@ This document lists all environment variables required to run the Geeves.Life ap
 ## Database
 
 | Variable | Description | Example |
-|----------|-------------|----------|
+|----------|-------------|---------|
 | `DATABASE_URL` | MySQL (Cloud SQL) connection string | `mysql://geeves_beta_user:pass@35.245.41.148:3306/geeves_beta` |
 
 **Environment-specific databases (GCP Secret Manager):**
@@ -70,6 +70,15 @@ This document lists all environment variables required to run the Geeves.Life ap
 | Variable | Description | Example |
 |----------|-------------|---------|
 | `SYSTEM_CRON_SECRET` | Secret for authenticating scheduled job requests | (random string) |
+
+> **GCP Secret Manager mapping:** `SYSTEM_CRON_SECRET` is injected on Cloud Run
+> from the secret **`geeves-live-cron-secret`** (see `--set-secrets` in
+> `.github/workflows/deploy-cloudrun.yml`). Cloud Scheduler jobs must send the
+> **same value** as the `x-cron-secret` header — recreate/update them with
+> `ops/setup-cloud-scheduler.sh`, which reads `geeves-live-cron-secret`.
+> If the header value and this env var differ (or either is missing), every
+> `/api/scheduled/*` call returns **401 Unauthorized**. The server logs a clear
+> error at boot when `SYSTEM_CRON_SECRET` is unset.
 
 ## Analytics (optional)
 
