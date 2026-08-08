@@ -11,9 +11,11 @@
 // consecutively. This spreads the load and avoids per-calendar rate limits.
 import type { Request, Response } from "express";
 import { getDb } from "../db";
+import { ENV } from "../_core/env";
 import { shadowBlocks, calendars } from "../../drizzle/schema";
 import { eq, and, or, lte, isNull, sql } from "drizzle-orm";
 import { getAccessTokenForCalendar } from "../services/calendarWebhook";
+import { requireCronAuth } from "./scheduledAuth";
 
 // Tuned for faster throughput while staying within Google Calendar quotas:
 // Google allows ~60 events/min per calendar. With round-robin across 6-10 calendars,
@@ -53,12 +55,7 @@ export async function shadowBlockSyncRetryHandler(req: Request, res: Response) {
   }
   // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
   // Allow localhost for dev/test without auth.
-  const ip = req.ip ?? "";
-  const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-  const secret = req.headers["x-cron-secret"];
-  if (!isInternal && secret !== ENV.systemCronSecret) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  if (!requireCronAuth(req, res, "ShadowBlockSyncRetry")) return;
 
   const db = await getDb();
   if (!db) {
@@ -338,4 +335,3 @@ export async function shadowBlockSyncRetryHandler(req: Request, res: Response) {
     return res.status(500).json({ error: (err as Error)?.message });
   }
 }
-import { ENV } from "../_core/env";
