@@ -8,10 +8,10 @@
 // them resolved or bumps attempts with exponential backoff.
 import type { Request, Response } from "express";
 import { getDb } from "../db";
-import { ENV } from "../_core/env";
 import { propagationQueue, shadowBlocks } from "../../drizzle/schema";
 import { eq, and, lte, count } from "drizzle-orm";
 import { onEventUpserted } from "../services/eventPropagation";
+import { requireCronAuth } from "./scheduledAuth";
 
 const BATCH_SIZE = 200; // increased from 50 to speed up backfill drain
 
@@ -20,12 +20,7 @@ export async function propagationRetryHandler(req: Request, res: Response) {
 
   // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
   // Allow localhost for dev/test without auth.
-  const ip = req.ip ?? "";
-  const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-  const secret = req.headers["x-cron-secret"];
-  if (!isInternal && secret !== ENV.systemCronSecret) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  if (!requireCronAuth(req, res, "PropagationRetry")) return;
 
   const db = await getDb();
   if (!db) {

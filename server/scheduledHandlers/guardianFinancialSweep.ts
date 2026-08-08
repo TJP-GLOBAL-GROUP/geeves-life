@@ -6,18 +6,12 @@ import type { Request, Response } from "express";
 import { getDb } from "../db";
 import { sql } from "drizzle-orm";
 import { ENV } from "../_core/env";
-
-function isInternalIp(ip: string) {
-  return ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-}
+import { requireCronAuth } from "./scheduledAuth";
 
 export async function guardianFinancialSweepHandler(req: Request, res: Response) {
   // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
   // Allow localhost for dev/test without auth.
-  const secret = req.headers["x-cron-secret"];
-  if (!isInternalIp(req.ip ?? "") && secret !== ENV.systemCronSecret) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  if (!requireCronAuth(req, res, "GuardianFinancial")) return;
 
   if (!ENV.guardianEnabled) return res.json({ status: "disabled", skipped: true });
 
