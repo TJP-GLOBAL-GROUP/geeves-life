@@ -1,5 +1,7 @@
-# UI/UX Brand Review v2 — Finance Module (Stage C)
-**Reviewer role:** Design engineer, brand systems · **Date:** 2026-08-07 · **Status:** Superseding revision
+# UI/UX Brand Review v2.1 — Finance Module (Stage C)
+**Reviewer role:** Design engineer, brand systems · **Date:** 2026-08-07 · **Status:** v2.1 — all 5 owner-attention gaps CLOSED
+
+> **v2.1 revision note (owner approvals applied):** the 5 brand-asset gaps flagged in v2 are resolved — BL/BLab/TJPGG vertical hues assigned (§C1.1/§C1.2 registry), fonts self-hosted via `client/src/styles/fonts.css` + `scripts/fetch-fonts.sh`, `financeRedactedLabel` copy deck finalized (`client/src/lib/financeCopy.ts`, quoted in §C2.7), BL display name confirmed as **"Bohemian Lodges"** (code remains `BL`), and the empty-queue artwork gap closed by orchestrator-delivered assets (§C5 note). Everything else is byte-stable with v2.
 
 > **Supersedes:** `docs/finance/uiux_review_g6_report.md` (round-1). Round-1's capability inventory, data facts, and tooling design (bulk-accept w/ dry-run, burndown-as-deprecation-countdown, bot chips, no silent edits, batch undo, compare mode, screen-reader focus mode) **stand and are carried forward**. Its §(d) role matrix is **void**: it bucketed the Executive Assistant as read-only, contradicting the owner-approved access model. This document layers the official brand system (`docs/BRANDING.md`, `docs/DESIGN_PRINCIPLES.md`) onto the **Manus Part 3 access model adopted as D9 in `docs/Geeves_Unified_Finance_Implementation_Plan_v2.2.md` §4**.
 
@@ -34,6 +36,13 @@ All tokens derive from `docs/BRANDING.md` §3–§5. No other hues are permitted
   --brand-violet: #8B5CF6;  /* PERS */
   --brand-indigo: #4F7EC4;  /* MB (finance primary vertical accent) */
   --brand-amber:  #E8943A;  /* SO */
+
+  /* Vertical hues — v2.1 owner-approved (gap 1). Low-saturation, warm-palette
+     tones derived from the rainbow for the three verticals without a fixed
+     assignment. Chips always pair dot + code text (colorblind rule). */
+  --vertical-bl:    #B98A63;  /* BL Bohemian Lodges — warm clay (hospitality) */
+  --vertical-blab:  #5F948F;  /* BLab Bohemian Labs — muted teal-sage (R&D) */
+  --vertical-tjpgg: #8A7B5E;  /* TJPGG TJ Perkins Global Group — bronze (holding) */
 
   /* Foundation */
   --fin-bg:            #FAFAF8;  /* Warm White */
@@ -78,6 +87,11 @@ All tokens derive from `docs/BRANDING.md` §3–§5. No other hues are permitted
   --fin-posted:        #6FAE8F;
   --fin-conflict:      #D9A45B;
   --fin-redacted:      #3A3E46;
+
+  /* Vertical hues — lifted for contrast on Deep Charcoal */
+  --vertical-bl:    #D4A97F;
+  --vertical-blab:  #82B3AD;
+  --vertical-tjpgg: #AB9A7A;
 }
 ```
 
@@ -94,12 +108,27 @@ colors: {
     fg:'var(--fin-fg)', 'fg-muted':'var(--fin-fg-muted)', border:'var(--fin-border)',
     negative:'var(--fin-negative)', posted:'var(--fin-posted)', draft:'var(--fin-draft)',
     conflict:'var(--fin-conflict)', redacted:'var(--fin-redacted)'
-  }
+  },
+  vertical: { bl:'var(--vertical-bl)', blab:'var(--vertical-blab)', tjpgg:'var(--vertical-tjpgg)' }
 },
 fontFamily: { display:['Outfit','Nunito','sans-serif'], sans:['Inter','system-ui','sans-serif'], mono:['JetBrains Mono','ui-monospace','monospace'] }
 ```
 
-**Vertical chip tokens:** each finance vertical maps to its fixed brand colour (§5 of BRANDING.md: FAM coral, MB indigo, MM gold, PERS violet, SO amber; GL teal; BL/BLab/TJPGG assigned **from the 6 rainbow colours only** — BL → amber is taken by SO, so BL takes indigo-family distinction via code text; **owner decision needed** if BL wants a distinct hue: palette forbids new hues, so BL/BLab must reuse a rainbow colour and rely on the code label). Chips are always `color dot + code text` (MB / MM / BL…) — colour is never the sole encoding (colorblind rule).
+**Vertical registry (v2.1 — display names owner-confirmed):**
+
+| Code | Display name | Hue token | Light | Dark |
+|---|---|---|---|---|
+| FAM | Home & Family | `--brand-coral` | `#E8624A` | `#E8624A` |
+| MB | Maxfield Bakery | `--brand-indigo` | `#4F7EC4` | `#4F7EC4` |
+| MM | Maxfield Market | `--brand-gold` | `#D4A017` | `#D4A017` |
+| PERS | Personal | `--brand-violet` | `#8B5CF6` | `#8B5CF6` |
+| SO | StartOut | `--brand-amber` | `#E8943A` | `#E8943A` |
+| GL | Geeves.Life | `--brand-teal` | `#2AAFA9` | `#2AAFA9` |
+| **BL** | **Bohemian Lodges** | `--vertical-bl` | `#B98A63` | `#D4A97F` |
+| **BLab** | **Bohemian Labs** | `--vertical-blab` | `#5F948F` | `#82B3AD` |
+| **TJPGG** | **TJ Perkins Global Group** | `--vertical-tjpgg` | `#8A7B5E` | `#AB9A7A` |
+
+**Owner ruling (v2.1, gap 1):** BL display name = **"Bohemian Lodges"** (code remains `BL`; supersedes the "Blue Lagoon" doc-side placeholder — the staging registry on `finance/v2.2-staging` was corrected in the same pass). BL/BLab/TJPGG take low-saturation warm-palette hues derived from the rainbow (BL warm clay from amber/coral family, BLab muted teal-sage from teal family, TJPGG bronze from gold/amber family) so the 6 rainbow colours remain the only *saturated* accents. Chips are always `color dot + code text` (MB / MM / BL…) — colour is never the sole encoding (colorblind rule).
 
 ### C1.3 Typography rules for finance
 - Page/section titles: **Outfit 700**. Never Outfit 300 for functional headings (300 reserved for salutations/tagline per NC-01/NC-10).
@@ -149,12 +178,27 @@ The calendar system's shadow-block `busyLabel` pattern (see `ShadowBlocksPanel.t
 
 - **Rule:** entries appear in every vertical they touch; the viewer sees only entitled lines. Counterparty vertical renders as **`verticals.financeRedactedLabel` + amount** — never account, never memo (plan §4.4).
 - **Component:** `RedactedRow` / `RedactedCell` —
-  - Row: warm `bg-fin-surface-muted`, diagonal hatch in `--fin-redacted` at 40% opacity, lock glyph (`lucide Lock`, `--fin-lock`, 14px) leading the cell, label in Muted Slate italic: the configured `financeRedactedLabel` (e.g. "Internal — Personal" / "Inter-company").
-  - Amount column: the **visible-side amount is real** (the viewer's own line); the counterparty amount is shown only if the entry balances within visible scope, else rendered as `—` with tooltip "Amount visible to {vertical} members".
+  - Row: warm `bg-fin-surface-muted`, diagonal hatch in `--fin-redacted` at 40% opacity, lock glyph (`lucide Lock`, `--fin-lock`, 14px) leading the cell, label in Muted Slate italic: the configured `financeRedactedLabel`.
+  - Amount column: the **visible-side amount is real** (the viewer's own line); the counterparty amount is shown only if the entry balances within visible scope, else rendered as `—` with tooltip "Amount visible to members of that vertical".
   - Interaction: click/hover does **not** peek. Tooltip offers one action: "Request access" (routes to household admin via existing permission-request flow). No blur-then-reveal, no inspect-element leaks — redaction is server-side; the client never receives the value.
   - Accessibility: `aria-label="Redacted: {financeRedactedLabel}"`; hatch is decorative (`aria-hidden`), lock icon has text equivalent. Never colour-only.
 - **k-anonymity suppression** (`view_aggregate`): same visual, label "Suppressed — fewer than 3 lines", no lock glyph (it's a policy, not a permission).
 - **Sensitive rows** (`finance.view_sensitive` not held): label "Restricted", lock glyph, use is audit-logged when granted.
+
+**Final copy deck (v2.1, gap 4 — owner confirmed; en-US; implemented in `client/src/lib/financeCopy.ts`).** Tone per BRANDING.md: discreet, butler-grade, never shaming — states a fact, offers one courteous path forward.
+
+| String constant | Copy |
+|---|---|
+| `FINANCE_REDACTED_CELL_LABEL` | "Withheld — private to another vertical" |
+| `FINANCE_REDACTED_ROW_LABEL` | "Internal — another vertical" |
+| `FINANCE_REDACTED_CARD_LABEL` | "Private — aggregate withheld" |
+| `FINANCE_LOCKED_VERTICAL_LABEL` | "This vertical is managed separately" |
+| `FINANCE_REQUEST_ACCESS_HINT` | "If you need this detail, you may request access from your household administrator." |
+| `FINANCE_SUPPRESSED_LABEL` | "Suppressed — fewer than 3 lines" |
+| `FINANCE_RESTRICTED_LABEL` | "Restricted" |
+| `FINANCE_AMOUNT_OUT_OF_SCOPE_HINT` | "Amount visible to members of that vertical" |
+
+The per-vertical `verticals.financeRedactedLabel` default is `FINANCE_REDACTED_ROW_LABEL` ("Internal — another vertical"); admins may override per vertical (plan §2.5), subject to the same tone contract.
 
 ---
 
@@ -215,14 +259,16 @@ Repo: `client/src` (React + tRPC + shadcn-style `components/ui`, sonner toasts, 
 
 **New components to build (Phase E):** `KpiStrip`, `AnchorSparkline`, `DriftPill`, `WorkbenchBadge`, `RegisterTable`, `LineageDrawer`, `RedactedRow`/`RedactedCell`, `QueueItemRow`, `ClassChip`, `DryRunModal`, `RealmCard`, `ApprovalGate`, `PeriodLockStrip`, `PivotTable`, `UnassignedTable`. All under `client/src/components/finance/`; routes under `/finance/:verticalCode/...` per C2.
 
+**C5 note (v2.1, gap 5):** the empty-queue celebration artwork assets were delivered separately by the orchestrator; placement: `client/public/assets/finance/`. The artwork is built from §2 constellation geometry (symbol-only mark, no stock art) per the v2 requirement — consume it in the zero-queue state instead of re-deriving SVG inline.
+
 ---
 
 ## G6 amendment summary (carried + updated)
-Round-1's G6 findings stand with two edits: the role-gating acceptance item now tests **the §4.3 matrix verbatim** (EA-full can post/resolve on assigned verticals; EA read_only cannot; Unassigned absence for non-admins; co-admin scoping) under blind + read_only + EA-full test accounts; and the brand audit (checklist E18) tests against C1 tokens — 6-colour rainbow + 5 foundation only, Deep Charcoal dark base, Outfit 700 headings, tabular numerals, no blue-purple gradients, constellation per §2/§8 of BRANDING.md.
+Round-1's G6 findings stand with two edits: the role-gating acceptance item now tests **the §4.3 matrix verbatim** (EA-full can post/resolve on assigned verticals; EA read_only cannot; Unassigned absence for non-admins; co-admin scoping) under blind + read_only + EA-full test accounts; and the brand audit (checklist E18) tests against C1 tokens — 6-colour rainbow + 5 foundation + 3 owner-approved vertical hues (BL/BLab/TJPGG) only, Deep Charcoal dark base, Outfit 700 headings, tabular numerals, no blue-purple gradients, constellation per §2/§8 of BRANDING.md.
 
-## Brand-asset gaps for owner attention
-1. **BL / BLab / TJPGG vertical hues:** palette permits only the 6 rainbow colours; SO already holds amber, MB indigo, MM gold, PERS violet, FAM coral, GL teal. BL and BLab must reuse rainbow colours + code-text distinction — confirm assignments (recommend BL → teal is GL's; so BL → `#D4A017`? conflicts MM — **needs owner ruling**; colourblind rule means code text carries the load regardless).
-2. **Outfit font files:** BRANDING.md mandates Outfit (700/300) + Inter (400–600); confirm webfont self-hosting or Google Fonts link is in `client/index.html` — not verified in this pass (flag if licensing requires self-host).
-3. **JetBrains Mono (agent IDs/hashes):** proposed but not in BRANDING.md — approve as `--font-mono` or fall back to system mono.
-4. **Redaction label copy:** `verticals.financeRedactedLabel` defaults ("Internal — Personal" / "Inter-company") need owner confirmation per vertical (plan §2.5 marks admin-configurable).
-5. **Empty-queue celebration artwork:** symbol-only constellation approved for this use per §8 rule 3; if a larger illustration is wanted it must be commissioned from §2 geometry — no stock art.
+## Brand-asset gaps for owner attention — v2.1 status: ALL CLOSED
+1. **BL / BLab / TJPGG vertical hues — CLOSED.** Owner approved derived low-saturation warm-palette hues instead of rainbow reuse: BL `#B98A63` light / `#D4A97F` dark (warm clay, hospitality), BLab `#5F948F` light / `#82B3AD` dark (muted teal-sage, R&D), TJPGG `#8A7B5E` light / `#AB9A7A` dark (bronze, holding). Tokens `--vertical-bl` / `--vertical-blab` / `--vertical-tjpgg` added to the token layer (`client/src/index.css` + §C1.1) and Tailwind map (§C1.2). Display names owner-confirmed: BL = "Bohemian Lodges" (code `BL`), BLab = "Bohemian Labs", TJPGG = "TJ Perkins Global Group". Code text still carries the load per the colorblind rule.
+2. **Outfit font files — CLOSED.** Self-hosting approved and implemented: `@font-face` blocks for Outfit 300/700, Inter 400/500/600 in `client/src/styles/fonts.css`, served from `/fonts/*.woff2` (`client/public/fonts/`). `scripts/fetch-fonts.sh` downloads the exact woff2 binaries from Google Fonts (css2 API → fonts.gstatic.com); all three families are OFL-licensed (see `client/public/fonts/README.md`). No Google Fonts `<link>` in `client/index.html` — self-host only.
+3. **JetBrains Mono — CLOSED.** Approved as `--font-mono` (400/500 self-hosted alongside Outfit/Inter); used for agent IDs, hashes, codes, and tabular ledger figures with `font-variant-numeric: tabular-nums`.
+4. **Redaction label copy — CLOSED.** Final en-US copy deck quoted in §C2.7 and implemented as exported constants in `client/src/lib/financeCopy.ts`; per-vertical `financeRedactedLabel` defaults to "Internal — another vertical" (admin-overridable per plan §2.5).
+5. **Empty-queue celebration artwork — CLOSED.** Assets delivered separately by the orchestrator; placement: `client/public/assets/finance/` — see C5 section note. Built from §2 constellation geometry (symbol-only, no stock art).
