@@ -16,11 +16,11 @@
 // - Idempotent: safe to run multiple times
 
 import type { Request, Response } from "express";
-import { ENV } from "../_core/env";
 import { getDb } from "../db";
 import { oauthTokens } from "../../drizzle/schema";
 import { and, eq, lt, gt, isNotNull } from "drizzle-orm";
 import { refreshAccessToken } from "../services/googleCalendarSync";
+import { requireCronAuth } from "./scheduledAuth";
 
 const REFRESH_WINDOW_MS = 30 * 60 * 1000; // 30 minutes
 
@@ -29,12 +29,7 @@ export async function tokenRefreshHandler(req: Request, res: Response) {
 
   // Auth: x-cron-secret header must match SYSTEM_CRON_SECRET (sent by Google Cloud Scheduler).
   // Allow localhost for dev/test without auth.
-  const ip = req.ip ?? "";
-  const isInternal = ip === "127.0.0.1" || ip === "::1" || ip.startsWith("::ffff:127.");
-  const secret = req.headers["x-cron-secret"];
-  if (!isInternal && secret !== ENV.systemCronSecret) {
-    return res.status(401).json({ error: "Unauthorized" });
-  }
+  if (!requireCronAuth(req, res, "TokenRefresh")) return;
 
   const db = await getDb();
   if (!db) return res.status(503).json({ error: "DB unavailable" });
