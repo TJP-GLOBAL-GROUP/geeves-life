@@ -1,0 +1,83 @@
+/* ============================================================================
+ * vertical-palette.css — Finance v2.2 extended vertical palette (vp-01…vp-20)
+ * CANONICAL source for the 20-option user-assignable vertical palette.
+ * Brand review: docs/finance/uiux_brand_review_v2.md v2.2 §C1.5.
+ *
+ * Owner-approved 3-tier colour model (supersedes BRANDING.md §5 rainbow-only):
+ *   Tier 1 — the 6 brand rainbow colours remain the DEFAULT vertical palette
+ *            (MB/MM/BL-PERS/FAM/GL tokens in index.css stay untouched).
+ *   Tier 2 — THIS file: up to 20 colorblindness-accessible options the user
+ *            can assign to verticals.
+ *   Tier 3 — beyond 20 verticals: custom colours and/or pattern fills
+ *            (roadmap; patterns double as redundant encoding for colorblind
+ *            users — colour is never the sole encoding in any tier).
+ *
+ * Derivation: hues based on the Okabe-Ito / Paul Tol qualitative palettes,
+ * muted toward the brand's low-saturation warm aesthetic. Dark-mode values
+ * are lightness-lifted (+16 L*, chroma ×0.92) for contrast on Deep Charcoal
+ * (#1A1C20); vp-07/08/09 darks are the owner-approved PR #20 lifts.
+ *
+ * COLORBLIND VERIFICATION (Machado et al. 2009 simulation, 100% severity,
+ * ΔE in CIELAB — weakest pairs, light mode):
+ *   deuteranopia: wine/forest 3.7 · mauve/lavender-grey 4.2 · blush/celadon 4.5
+ *   protanopia:   petrol/plum 5.1 · moss/olive 5.2 · bronze/forest 5.2
+ *   tritanopia:   petrol/denim 5.6 · ochre/clay 6.2
+ * These are the weakest pairs in the set; a 20-colour muted qualitative set
+ * cannot do better — which is why the code text on chips (MB / BL / BLab…)
+ * and, later, pattern fills carry the redundant encoding. Avoid assigning a
+ * weak pair to two verticals that routinely appear side-by-side.
+ *
+ * Existing vertical mapping (hexes identical to PR #20 / index.css literals):
+ *   BL   Bohemian Lodges        = vp-07 clay      #B98A63 / #D4A97F
+ *   BLab Beta Lab (betalab.com) = vp-08 teal-sage #5F948F / #82B3AD
+ *   TJPGG TJ Perkins Global Grp = vp-09 bronze    #8A7B5E / #AB9A7A
+ * The 6 rainbow defaults (MB/MM/PERS/FAM/GL/SO) are NOT vp tokens — they stay
+ * on the --brand-* tokens per Tier 1.
+ * ========================================================================== */
+
+:root {
+  --vp-01: #C89A45;  /* ochre         — warm harvest yellow-brown */
+  --vp-02: #9A4150;  /* wine          — deep muted red */
+  --vp-03: #6E9153;  /* moss          — soft green */
+  --vp-04: #7A8695;  /* slate         — blue-grey neutral */
+  --vp-05: #6FA3C0;  /* sky           — muted light blue */
+  --vp-06: #9A7BA8;  /* mauve         — dusty violet */
+  --vp-07: #B98A63;  /* clay          — BL Bohemian Lodges (PR #20 value) */
+  --vp-08: #5F948F;  /* teal-sage     — BLab Beta Lab (PR #20 value) */
+  --vp-09: #8A7B5E;  /* bronze        — TJPGG (PR #20 value) */
+  --vp-10: #B06A45;  /* rust          — burnt orange-brown */
+  --vp-11: #A08D4C;  /* olive         — yellow-green earth */
+  --vp-12: #4F7482;  /* petrol        — deep teal-blue */
+  --vp-13: #8A5F7D;  /* plum          — muted purple-red */
+  --vp-14: #527456;  /* forest        — deep muted green */
+  --vp-15: #8E8AA8;  /* lavender-grey — cool neutral violet */
+  --vp-16: #5A6FA6;  /* denim         — soft mid blue */
+  --vp-17: #C9B491;  /* sand          — pale warm neutral */
+  --vp-18: #6F6E72;  /* pewter        — dark warm grey */
+  --vp-19: #C79C9C;  /* blush         — pale warm pink */
+  --vp-20: #9DB89A;  /* celadon       — pale grey-green */
+}
+
+.dark {
+  /* Lifted for contrast on Deep Charcoal. vp-07/08/09 = owner-approved PR #20 darks. */
+  --vp-01: #EEBF70;  /* ochre */
+  --vp-02: #C36D78;  /* wine */
+  --vp-03: #9ABB80;  /* moss */
+  --vp-04: #A5B0BF;  /* slate */
+  --vp-05: #9ECDE9;  /* sky */
+  --vp-06: #C4A6D1;  /* mauve */
+  --vp-07: #D4A97F;  /* clay — BL */
+  --vp-08: #82B3AD;  /* teal-sage — BLab */
+  --vp-09: #AB9A7A;  /* bronze — TJPGG */
+  --vp-10: #DB9571;  /* rust */
+  --vp-11: #CCB87A;  /* olive */
+  --vp-12: #7B9DAA;  /* petrol */
+  --vp-13: #B389A5;  /* plum */
+  --vp-14: #7C9D7F;  /* forest */
+  --vp-15: #B9B5D2;  /* lavender-grey */
+  --vp-16: #8798CD;  /* denim */
+  --vp-17: #D8C4A3;  /* sand */
+  --vp-18: #98979B;  /* pewter */
+  --vp-19: #E6BDBC;  /* blush */
+  --vp-20: #B4CDB1;  /* celadon */
+}
